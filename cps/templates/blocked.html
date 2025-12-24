@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover text-center">
+    <h2>{{_('Access Blocked')}}</h2>
+
+    <div class="alert alert-danger" style="margin-top: 30px;">
+        <span class="glyphicon glyphicon-ban-circle"
+            style="font-size: 3em; display: block; margin-bottom: 20px;"></span>
+        <h3>{{_('Your access request has been blocked')}}</h3>
+        <p>{{_('Your access requests have been rejected multiple times.')}}</p>
+    </div>
+
+    <div class="well">
+        <p>{{_('If you believe this is an error, please contact the administrator directly.')}}</p>
+    </div>
+
+    <a href="{{ url_for('web.login') }}" class="btn btn-default">{{_('Back to Login')}}</a>
+</div>
+{% endblock %}

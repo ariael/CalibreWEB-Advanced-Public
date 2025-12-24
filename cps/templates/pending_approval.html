@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover text-center">
+    <h2>{{_('Access Request Submitted')}}</h2>
+
+    <div class="alert alert-info" style="margin-top: 30px;">
+        <span class="glyphicon glyphicon-time" style="font-size: 3em; display: block; margin-bottom: 20px;"></span>
+        <h3>{{_('Your request has been registered')}}</h3>
+        <p>{{_('Please wait for administrator approval.')}}</p>
+    </div>
+
+    <div class="well">
+        <p>{{_('You will be able to login once an administrator approves your request.')}}</p>
+        <p class="text-muted">{{_('This may take some time. Please check back later.')}}</p>
+    </div>
+
+    <a href="{{ url_for('web.login') }}" class="btn btn-default">{{_('Back to Login')}}</a>
+</div>
+{% endblock %}
