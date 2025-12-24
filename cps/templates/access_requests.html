@@ -1,0 +1,154 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover">
+    <h2>{{_('Pending Access Requests')}}</h2>
+
+    {% if requests|length == 0 %}
+    <div class="alert alert-info">
+        <p>{{_('No pending access requests.')}}</p>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>{{_('Username')}}</th>
+                    <th>{{_('Email')}}</th>
+                    <th>{{_('Requested')}}</th>
+                    <th>{{_('Actions')}}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requests %}
+                <tr id="request-row-{{ req.id }}">
+                    <td>
+                        {{ req.username }}
+                        {% if phpbb_url %}
+                        <a href="{{ phpbb_url }}/memberlist.php?mode=viewprofile&u={{ req.phpbb_user_id }}"
+                            target="_blank" class="btn btn-xs btn-link" title="{{_('View Forum Profile')}}">
+                            <span class="glyphicon glyphicon-new-window"></span>
+                        </a>
+                        {% endif %}
+                    </td>
+                    <td>{{ req.email }}</td>
+                    <td>{{ req.requested_at.strftime('%Y-%m-%d %H:%M') if req.requested_at else '' }}</td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-success"
+                                onclick="approveRequest({{ req.id }}, 'reader')">
+                                <span class="glyphicon glyphicon-ok"></span> {{_('Reader')}}
+                            </button>
+
+                            {% if current_user.role_admin() %}
+                            <button type="button" class="btn btn-sm btn-primary"
+                                onclick="approveRequest({{ req.id }}, 'limited_admin')">
+                                <span class="glyphicon glyphicon-user"></span> {{_('Limited Admin')}}
+                            </button>
+                            <button type="button" class="btn btn-sm btn-warning"
+                                onclick="approveRequest({{ req.id }}, 'auditor')">
+                                <span class="glyphicon glyphicon-wrench"></span> {{_('Auditor')}}
+                            </button>
+                            {% endif %}
+
+                            <button type="button" class="btn btn-sm btn-danger"
+                                onclick="showRejectModal({{ req.id }}, '{{ req.username }}')">
+                                <span class="glyphicon glyphicon-remove"></span> {{_('Reject')}}
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Reject Modal -->
+<div class="modal fade" id="rejectModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <h4 class="modal-title">{{_('Reject Access Request')}}</h4>
+            </div>
+            <div class="modal-body">
+                <p>{{_('Are you sure you want to reject')}} <strong id="reject-username"></strong>?</p>
+                <div class="form-group">
+                    <label for="rejection-reason">{{_('Reason (optional)')}}:</label>
+                    <textarea class="form-control" id="rejection-reason" rows="3"
+                        placeholder="{{_('This will be shown to the user')}}"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">{{_('Cancel')}}</button>
+                <button type="button" class="btn btn-danger" onclick="confirmReject()">{{_('Reject')}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var currentRejectId = null;
+
+    function approveRequest(requestId, role) {
+        if (!confirm('{{_("Are you sure you want to approve this request?")}}')) {
+            return;
+        }
+
+        $.post('{{ url_for("admin.approve_access_request") }}', {
+            request_id: requestId,
+            role: role,
+            csrf_token: '{{ csrf_token() }}'
+        }).done(function (data) {
+            if (data.success) {
+                $('#request-row-' + requestId).fadeOut(400, function () {
+                    $(this).remove();
+                    if ($('tbody tr').length === 0) {
+                        location.reload();
+                    }
+                });
+                toastr.success('{{_("Request approved successfully")}}');
+            } else {
+                toastr.error(data.message || '{{_("Failed to approve request")}}');
+            }
+        }).fail(function () {
+            toastr.error('{{_("Network error")}}');
+        });
+    }
+
+    function showRejectModal(requestId, username) {
+        currentRejectId = requestId;
+        $('#reject-username').text(username);
+        $('#rejection-reason').val('');
+        $('#rejectModal').modal('show');
+    }
+
+    function confirmReject() {
+        if (!currentRejectId) return;
+
+        var reason = $('#rejection-reason').val().trim();
+
+        $.post('{{ url_for("admin.reject_access_request") }}', {
+            request_id: currentRejectId,
+            reason: reason,
+            csrf_token: '{{ csrf_token() }}'
+        }).done(function (data) {
+            if (data.success) {
+                $('#request-row-' + currentRejectId).fadeOut(400, function () {
+                    $(this).remove();
+                    if ($('tbody tr').length === 0) {
+                        location.reload();
+                    }
+                });
+                $('#rejectModal').modal('hide');
+                toastr.success('{{_("Request rejected")}}');
+            } else {
+                toastr.error(data.message || '{{_("Failed to reject request")}}');
+            }
+        }).fail(function () {
+            toastr.error('{{_("Network error")}}');
+        });
+    }
+</script>
+{% endblock %}

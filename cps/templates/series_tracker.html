@@ -1,0 +1,208 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover">
+    <h2>{{_('Series Tracker')}}</h2>
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>{{_('Series Name')}}</th>
+                    <th>{{_('Books')}}</th>
+                    <th>{{_('Range')}}</th>
+                    <th>{{_('Status')}}</th>
+                    <th>{{_('Gaps')}}</th>
+                    <th>{{_('Actions')}}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in series %}
+                <tr class="{% if s.is_update_available %}warning{% endif %}">
+                    <td>
+                        <span class="label label-{% if s.all_healthy %}success{% else %}danger{% endif %}"
+                            title="{{_('Health Status')}}" data-toggle="tooltip">
+                            <span
+                                class="glyphicon glyphicon-{% if s.all_healthy %}heart{% else %}warning-sign{% endif %}"></span>
+                        </span>
+                        <a href="{{ url_for('web.books_list', data='series', book_id=s.id, sort_param='series_index') }}"
+                            style="font-weight: bold;">{{
+                            s.name }}</a>
+                        {% if current_user.role_admin() %}
+                        <button class="btn btn-xs btn-link rename-series" data-id="{{ s.id }}" data-name="{{ s.name }}"
+                            style="padding: 0; color: #8a6d3b;">
+                            <span class="glyphicon glyphicon-edit"></span>
+                        </button>
+                        {% endif %}
+
+                        {% if s.is_update_available %}
+                        <br>
+                        <span class="label label-warning new-release-label">
+                            <span class="glyphicon glyphicon-bullhorn"></span> {{_('SERIES UPDATE: New items added')}}
+                        </span>
+                        {% elif s.has_new_books and not s.is_fully_read %}
+                        <br>
+                        <span class="label label-info new-release-label">
+                            <span class="glyphicon glyphicon-star"></span> {{_('New Release')}}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="margin-bottom: 5px;">
+                            {% for book in s.books %}
+                            <a href="{{ url_for('web.show_book', book_id=book.id) }}"
+                                class="label label-{% if book.read_status == 1 %}success{% elif book.read_status == 2 %}info{% else %}default{% endif %} book-item-status-label"
+                                title="{{ book.title }} ({{ book.series_index|formatfloat(1) }})" data-toggle="tooltip">
+                                {{ book.series_index|formatfloat(1) }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>{{ s.min }} - {{ s.max }}</td>
+                    <td>
+                        <div class="series-progress-container">
+                            <div class="series-progress-bar-wrapper">
+                                <div class="progress series-progress-bar">
+                                    <div class="progress-bar progress-bar-{% if s.is_fully_read %}success{% else %}info{% endif %}"
+                                        role="progressbar"
+                                        style="width: {{ (s.read_count / s.total_in_series * 100)|int }}%;">
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="series-progress-text">{{ s.read_count }} / {{ s.total_in_series
+                                }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if s.gaps %}
+                        {% for gap in s.gaps %}
+                        <span class="label label-danger">{{ gap }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-success"><span class="glyphicon glyphicon-ok"></span></span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            {% if current_user.role_admin() %}
+                            <button class="btn btn-xs btn-info bulk-edit-series" data-id="{{ s.id }}">
+                                <span class="glyphicon glyphicon-list"></span> {{_('Bulk Edit')}}
+                            </button>
+                            {% endif %}
+                            <a href="{{ url_for('web.mark_series_read', series_id=s.id) }}"
+                                class="btn btn-xs btn-primary">{{_('Mark all read')}}</a>
+                            <a href="{{ url_for('web.bulk_download_series', series_id=s.id) }}"
+                                class="btn btn-xs btn-default"><span class="glyphicon glyphicon-download-alt"></span>
+                                {{_('ZIP')}}</a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(function () {
+        // Rename Series
+        $('.rename-series').click(function () {
+            var id = $(this).data('id');
+            var oldName = $(this).data('name');
+            var newName = prompt("{{_('Enter new name for series')}}:", oldName);
+            if (newName && newName !== oldName) {
+                $.ajax({
+                    url: "{{ url_for('admin.rename_series') }}",
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ id: id, new_name: newName }),
+                    success: function (response) {
+                        location.reload();
+                    },
+                    error: function (xhr) {
+                        alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
+                    }
+                });
+            }
+        });
+
+        // Bulk Edit Series
+        $('.bulk-edit-series').click(function () {
+            var id = $(this).data('id');
+            $.get("{{ url_for('admin.get_book_ids_for_series', series_id=0) }}".replace('/0', '/' + id), function (data) {
+                if (data.success && data.ids.length > 0) {
+                    $('#bulk_edit_selections').val(JSON.stringify(data.ids));
+                    $('#edit_selected_modal').modal("show");
+                }
+            });
+        });
+
+        $('#edit_selected_confirm').click(function () {
+            var selections = JSON.parse($('#bulk_edit_selections').val());
+            $.ajax({
+                url: "{{ url_for('edit-book.edit_selected_books') }}",
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    "selections": selections,
+                    "authors": $("#authors_input").val(),
+                    "categories": $("#categories_input").val(),
+                    "series": $("#series_input").val(),
+                    "languages": $("#languages_input").val(),
+                    "publishers": $("#publishers_input").val(),
+                    "comments": $("#comments_input").val(),
+                    "checkA": true,
+                    "checkT": true
+                }),
+                success: function (response) {
+                    location.reload();
+                },
+                error: function (xhr) {
+                    alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
+                }
+            });
+        });
+    });
+</script>
+
+<!-- Bulk Edit Modal -->
+<div class="modal fade" id="edit_selected_modal" role="dialog" aria-labelledby="metaEditSelectedLabel">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-center">
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h4 class="modal-title">{{_('Bulk Edit Metadata')}}</h4>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="bulk_edit_selections">
+                <div class="text-left">{{_('Edit the fields you want changed for all books in this series. Blank fields
+                    will be ignored:')}}</div>
+                <br>
+                {{_('Authors')}}:
+                <input class="form-control" id="authors_input" placeholder="e.g. Tolkien">
+                <p></p>
+                {{_('Categories (Tags)')}}:
+                <input class="form-control" id="categories_input" placeholder="e.g. Fantasy, Classic">
+                <p></p>
+                {{_('Series')}}:
+                <input class="form-control" id="series_input">
+                <p></p>
+                {{_('Languages')}}:
+                <input class="form-control" id="languages_input" placeholder="e.g. ces, eng">
+                <p></p>
+                {{_('Publishers')}}:
+                <input class="form-control" id="publishers_input">
+                <p></p>
+                {{_('Description')}}:
+                <textarea class="form-control" id="comments_input" rows="3"></textarea>
+                <p></p>
+            </div>
+            <div class="modal-footer">
+                <button id="edit_selected_confirm" type="button" class="btn btn-primary" data-dismiss="modal">{{_('Apply
+                    to all books')}}</button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">{{_('Cancel')}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

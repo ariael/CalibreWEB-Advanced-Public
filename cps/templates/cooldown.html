@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover text-center">
+    <h2>{{_('Request Rejected')}}</h2>
+
+    <div class="alert alert-warning" style="margin-top: 30px;">
+        <span class="glyphicon glyphicon-remove-circle"
+            style="font-size: 3em; display: block; margin-bottom: 20px;"></span>
+        <h3>{{_('Your access request was not approved')}}</h3>
+
+        {% if rejection_reason %}
+        <div class="well text-left" style="margin-top: 20px;">
+            <strong>{{_('Reason')}}:</strong>
+            <p>{{ rejection_reason }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="well">
+        <p>{{_('You may submit a new request after')}} <strong>{{ cooldown_end_date }}</strong></p>
+        <p class="text-muted">{{_('(1 month cooldown period)')}}</p>
+    </div>
+
+    <a href="{{ url_for('web.login') }}" class="btn btn-default">{{_('Back to Login')}}</a>
+</div>
+{% endblock %}

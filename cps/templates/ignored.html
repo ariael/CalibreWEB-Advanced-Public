@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+{% block body %}
+<h1 class="{{page}}">{{_(title)}}</h1>
+
+<ul class="nav nav-tabs">
+    <li class="active"><a data-toggle="tab" href="#series">{{ _("Series") }}</a></li>
+    <li><a data-toggle="tab" href="#authors">{{ _("Authors") }}</a></li>
+    <li><a data-toggle="tab" href="#books">{{ _("Books") }}</a></li>
+</ul>
+
+<div class="tab-content" style="margin-top: 20px;">
+    <div id="series" class="tab-pane fade in active">
+        {% if not series %}
+        <p>{{ _("No ignored series") }}</p>
+        {% else %}
+        <ul class="list-group">
+            {% for item in series %}
+            <li class="list-group-item">
+                {{ item.name }}
+                <button class="btn btn-default btn-xs pull-right restore-btn" data-id="{{item.id}}" data-type="1">{{
+                    _("Restore") }}</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    <div id="authors" class="tab-pane fade">
+        {% if not authors %}
+        <p>{{ _("No ignored authors") }}</p>
+        {% else %}
+        <ul class="list-group">
+            {% for item in authors %}
+            <li class="list-group-item">
+                {{ item.name|replace('|', ',') }}
+                <button class="btn btn-default btn-xs pull-right restore-btn" data-id="{{item.id}}" data-type="2">{{
+                    _("Restore") }}</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    <div id="books" class="tab-pane fade">
+        {% if not books %}
+        <p>{{ _("No ignored books") }}</p>
+        {% else %}
+        <ul class="list-group">
+            {% for item in books %}
+            <li class="list-group-item">
+                {{ item.title }}
+                <button class="btn btn-default btn-xs pull-right restore-btn" data-id="{{item.id}}" data-type="0">{{
+                    _("Restore") }}</button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+{% block js %}
+<script>
+    $(document).on('click', '.restore-btn', function () {
+        var btn = $(this);
+        var itemType = btn.data('type');
+        var itemId = btn.data('id');
+
+        var url = window.location.protocol + "//" + window.location.host + "{{ url_for('web.index') }}".replace(/\/$/, "") + "/ajax/toggle_preference/" + itemType + "/" + itemId;
+
+        $.ajax({
+            url: url,
+            type: "POST",
+            data: { status: 0 }, // Status 0 to remove preference
+            success: function () {
+                btn.closest('li').fadeOut();
+            }
+        });
+    });
+</script>
+{% endblock %}

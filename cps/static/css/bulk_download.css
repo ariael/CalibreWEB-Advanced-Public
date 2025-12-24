@@ -1,0 +1,25 @@
+/* Bulk Download Button Styles */
+
+.btn-downloading {
+    position: relative;
+    pointer-events: none;
+}
+
+.btn-downloading .glyphicon-hourglass {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.download-progress-text {
+    font-weight: bold;
+    margin-left: 5px;
+}

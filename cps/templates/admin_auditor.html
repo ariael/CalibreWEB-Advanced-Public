@@ -1,0 +1,236 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="discover">
+    <h2>{{_('Library Format Auditor')}}</h2>
+    {% if context_name %}
+    <h3 class="text-primary">{{_('Auditing')}}: {{ context_name }}</h3>
+    {% endif %}
+    <p class="lead">{{_('Administrators tool to verify book format consistency.')}}</p>
+
+    {% if series_id or author_id %}
+    <div class="row mb-4">
+        <div class="col-sm-3">
+            <div class="panel panel-info text-center" style="padding: 15px;">
+                <h4 style="margin: 0;">{{ total_books }}</h4>
+                <small class="text-muted text-uppercase">{{_('Total Books')}}</small>
+            </div>
+        </div>
+        {% if missing_indices %}
+        <div class="col-sm-6">
+            <div class="panel panel-danger" style="padding: 15px;">
+                <h4 style="margin: 0; color: #a94442;"><span class="glyphicon glyphicon-exclamation-sign"></span>
+                    {{_('Series Continuity Issue')}}</h4>
+                <p style="margin-top: 5px;">{{_('Missing indices')}}: <strong>{{ missing_indices|join(', ') }}</strong>
+                </p>
+            </div>
+        </div>
+        {% endif %}
+        <div class="col-sm-3 text-right">
+            <div class="btn-group-vertical" style="width: 100%;">
+                <a href="{{ url_for('admin.auditor_bulk_fix') }}" class="btn btn-warning"
+                    onclick="return confirm('{{_('Are you sure you want to remove extra formats from ALL books in this view?')}}')">
+                    <span class="glyphicon glyphicon-wrench"></span> {{_('Purge Extras (Bulk)')}}
+                </a>
+                <a href="{{ url_for('admin.library_auditor') }}" class="btn btn-default" style="margin-top: 5px;">
+                    <span class="glyphicon glyphicon-refresh"></span> {{_('Reset Audit')}}
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row mb-4">
+        <div class="col">
+            <div class="panel panel-default">
+                <div class="panel-heading">{{_('Standard Requirements')}}</div>
+                <div class="panel-body">
+                    <ul>
+                        <li><strong>AZW</strong>: {{_('Original format (any language)')}}</li>
+                        <li><strong>DOCX / EPUB (CZ)</strong>: {{_('Czech content verified by internal auditor')}}</li>
+                        <li><strong>Metadata</strong>: {{_('Description must be in Czech or English')}}</li>
+                        <li>{{_('No other formats allowed.')}}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if show_progress %}
+    <!-- Progress Bar Section -->
+    <div id="progress-section" class="panel panel-info">
+        <div class="panel-heading">
+            <h4>{{_('Processing Library...')}}</h4>
+        </div>
+        <div class="panel-body">
+            <div class="progress" style="height: 30px;">
+                <div id="audit-progress-bar" class="progress-bar progress-bar-striped active" role="progressbar"
+                    aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                    <span id="progress-text">0%</span>
+                </div>
+            </div>
+            <p class="text-center" style="margin-top: 10px;">
+                <strong id="progress-status">{{_('Starting audit...')}}</strong>
+                <br>
+                <span id="progress-details">{{_('Processing')}} <span id="current-book">0</span> / <span
+                        id="total-books">{{ total_books }}</span> {{_('books')}}</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Results will appear here after processing -->
+    <div id="results-section" style="display: none;">
+        {% endif %}
+
+        <table class="table table-striped" id="audit-results-table">
+            <thead>
+                <tr>
+                    <th>{{_('Book Title')}}</th>
+                    <th>{{_('Author')}}</th>
+                    <th>{{_('Series')}}</th>
+                    <th>{{_('Idx')}}</th>
+                    <th>{{_('AZW')}}</th>
+                    <th>{{_('DOCX (CZ)')}}</th>
+                    <th>{{_('EPUB')}}</th>
+                    <th>{{_('Metadata')}}</th>
+                    <th>{{_('Extras')}}</th>
+                    <th>{{_('Actions')}}</th>
+                </tr>
+            </thead>
+            <tbody id="audit-results-body">
+                {% for entry in audit_results %}
+                <tr class="{% if not entry.is_healthy %}danger{% endif %}">
+                    <td><a href="{{ url_for('web.show_book', book_id=entry.id) }}">{{ entry.title }}</a></td>
+                    <td>{{ entry.authors }}</td>
+                    <td>{{ entry.series }}</td>
+                    <td>{{ entry.series_index }}</td>
+                    <td>
+                        {% if entry.has_azw %}
+                        <span class="glyphicon glyphicon-ok text-success"></span>
+                        {% else %}
+                        <span class="glyphicon glyphicon-remove text-danger"></span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.has_docx_cz %}
+                        <span class="glyphicon glyphicon-ok text-success"></span>
+                        {% else %}
+                        <span class="glyphicon glyphicon-remove text-danger"></span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.has_epub %}
+                        <span class="glyphicon glyphicon-ok text-success"></span>
+                        {% else %}
+                        <span class="glyphicon glyphicon-remove text-danger"></span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.desc_lang == 'ces' %}
+                        <span class="label label-success">CZ</span>
+                        {% elif entry.desc_lang == 'eng' %}
+                        <span class="label label-info">EN</span>
+                        {% else %}
+                        <span class="label label-danger">?</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.extra_formats %}
+                        <span class="label label-warning" title="{{ entry.extra_formats|join(', ') }}">{{
+                            entry.extra_formats|length }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            {% if entry.extra_formats %}
+                            <a href="{{ url_for('admin.auditor_fix', book_id=entry.id) }}"
+                                class="btn btn-xs btn-warning">{{_('Remove Extras')}}</a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if show_progress %}
+    </div>
+    {% endif %}
+</div>
+
+{% if show_progress %}
+<script>
+    $(document).ready(function () {
+        var totalBooks = {{ total_books }};
+        var pollInterval;
+
+    function pollAuditorProgress() {
+        $.ajax({
+            url: "{{ url_for('admin.auditor_process') }}",
+            method: 'GET',
+            success: function (data) {
+                $('#audit-progress-bar').css('width', data.percentage + '%');
+                $('#audit-progress-bar').attr('aria-valuenow', data.percentage);
+                $('#progress-text').text(data.percentage + '%');
+                $('#current-book').text(data.current);
+                $('#total-books').text(data.total);
+                $('#progress-status').text('{{_("Processing library...")}}');
+
+                if (data.complete) {
+                    clearInterval(pollInterval);
+                    $('#progress-status').text('{{_("Audit complete!")}}');
+                    $('#audit-progress-bar').removeClass('active').addClass('progress-bar-success');
+
+                    var tbody = $('#audit-results-body');
+                    tbody.empty();
+
+                    data.results.forEach(function (entry) {
+                        var row = '<tr class="' + (entry.is_healthy ? '' : 'danger') + '">';
+                        row += '<td><a href="/book/' + entry.id + '">' + entry.title + '</a></td>';
+                        row += '<td>' + entry.authors + '</td>';
+                        row += '<td>' + entry.series + '</td>';
+                        row += '<td>' + (entry.series_index || '-') + '</td>';
+                        row += '<td>' + (entry.has_azw ? '<span class="glyphicon glyphicon-ok text-success"></span>' : '<span class="glyphicon glyphicon-remove text-danger"></span>') + '</td>';
+                        row += '<td>' + (entry.has_docx_cz ? '<span class="glyphicon glyphicon-ok text-success"></span>' : '<span class="glyphicon glyphicon-remove text-danger"></span>') + '</td>';
+                        row += '<td>' + (entry.has_epub ? '<span class="glyphicon glyphicon-ok text-success"></span>' : '<span class="glyphicon glyphicon-remove text-danger"></span>') + '</td>';
+
+                        var langLabel = entry.desc_lang == 'ces' ? '<span class="label label-success">CZ</span>' :
+                            (entry.desc_lang == 'eng' ? '<span class="label label-info">EN</span>' : '<span class="label label-danger">?</span>');
+                        row += '<td>' + langLabel + '</td>';
+
+                        var extras = entry.extra_formats.length > 0 ?
+                            '<span class="label label-warning" title="' + entry.extra_formats.join(', ') + '">' + entry.extra_formats.length + '</span>' :
+                            '<span class="text-muted">-</span>';
+                        row += '<td>' + extras + '</td>';
+
+                        row += '<td><div class="btn-group">';
+                        if (entry.extra_formats.length > 0) {
+                            row += '<a href="/admin/auditor/fix/' + entry.id + '" class="btn btn-xs btn-warning">{{_("Remove Extras")}}</a>';
+                        }
+                        row += '</div></td>';
+                        row += '</tr>';
+                        tbody.append(row);
+                    });
+
+                    setTimeout(function () {
+                        $('#progress-section').fadeOut(function () {
+                            $('#results-section').fadeIn();
+                        });
+                    }, 1000);
+                }
+            },
+            error: function (xhr, status, error) {
+                clearInterval(pollInterval);
+                $('#progress-status').text('Error during audit: ' + error);
+                $('#audit-progress-bar').removeClass('active').addClass('progress-bar-danger');
+            }
+        });
+    }
+
+    pollAuditorProgress();
+    pollInterval = setInterval(pollAuditorProgress, 500);
+});
+</script>
+{% endif %}
+{% endblock %}

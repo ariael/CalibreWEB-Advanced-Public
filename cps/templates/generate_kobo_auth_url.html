@@ -1,0 +1,40 @@
+{% extends "fragment.html" %}
+{% block body %}
+<div class="well">
+  <p>
+    {% if not warning %}
+    {{_('Open the .kobo/Kobo/Kobo eReader.conf file in a text editor and add (or edit):')}}
+  </p>
+  <div class="input-group">
+    <input type="text" id="kobo_api_url" class="form-control"
+      value="api_endpoint={{url_for('kobo.TopLevelEndpoint', auth_token=auth_token, _external=True)}}" readonly>
+    <span class="input-group-btn">
+      <button class="btn btn-default" type="button" onclick="copyToClipboard()" title="{{_('Copy to clipboard')}}">
+        <span class="glyphicon glyphicon-copy"></span>
+      </button>
+    </span>
+  </div>
+  <br>
+  <p>
+    <a download="kobo_extra.conf"
+      href="data:text/plain;charset=utf-8,{{ 'api_endpoint=' + url_for('kobo.TopLevelEndpoint', auth_token=auth_token, _external=True) | urlencode }}"
+      class="btn btn-primary">
+      <span class="glyphicon glyphicon-download-alt"></span> {{_('Download Config Snippet')}}
+    </a>
+  </p>
+  <script>
+    function copyToClipboard() {
+      var copyText = document.getElementById("kobo_api_url");
+      copyText.select();
+      copyText.setSelectionRange(0, 99999); /* For mobile devices */
+      document.execCommand("copy");
+    }
+  </script>
+  {% else %}
+  {{warning}}
+  </p>
+  <p>{{_('Kobo Token:')}} {{ auth_token }}
+    {% endif %}
+  </p>
+</div>
+{% endblock %}

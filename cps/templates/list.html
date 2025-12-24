@@ -1,0 +1,449 @@
+{% extends "layout.html" %}
+{% block body %}
+<h1 class="{{page}}">{{_(title)}}</h1>
+
+<div class="filterheader hidden-xs">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if entries.__len__() and data == 'author' %}
+  <div id="sort_name" class="btn btn-primary"><b>B,A <-> A B</b></div>
+  {% endif %}
+  <div id="asc" data-order="{{ order }}" data-id="{{ data }}"
+    class="btn btn-primary {% if order == 1 %} active{% endif%}"><span
+      class="glyphicon glyphicon-sort-by-alphabet"></span></div>
+  <div id="desc" data-id="{{ data }}" class="btn btn-primary{% if order == 0 %} active{% endif%}"><span
+      class="glyphicon glyphicon-sort-by-alphabet-alt"></span></div>
+  {% if charlist|length %}
+  <div id="all" class="active btn btn-primary {% if charlist|length > 9 %}hidden-sm{% endif %}">{{_('All')}}</div>
+  {% endif %}
+  <div class="btn-group character {% if charlist|length > 9 %}hidden-sm{% endif %}" role="group">
+    {% for char in charlist%}
+    <div class="btn btn-primary char">{{char[0]}}</div>
+    {% endfor %}
+  </div>
+
+  {% if data == "series" %}
+  <button class="update-view btn btn-primary" data-target="series_view" id="grid-button"
+    data-view="grid">{{_('Grid')}}</button>
+  {% endif %}
+
+  <div class="view-toggle btn-group pull-right" style="margin-left: 10px;">
+    <button class="btn btn-primary toggle-view" data-view="grid" title="{{_('Grid View')}}"><span
+        class="glyphicon glyphicon-th"></span></button>
+    <button class="btn btn-primary active" title="{{_('Table View')}}"><span
+        class="glyphicon glyphicon-list"></span></button>
+  </div>
+</div>
+
+<div class="container1">
+  {% if data == 'author' %}
+  <!-- HIERARCHY VIEW (AUTHORS) -->
+  <div class="col-xs-12">
+    <table class="table table-hover hierarchy-table" style="background: transparent;">
+      <thead>
+        <tr>
+          <th style="width: 50%;">{{_('Author')}} / {{_('Series')}} / {{_('Book')}}</th>
+          <th style="width: 15%;" class="hidden-xs">{{_('Count')}}</th>
+          <th style="width: 35%;">{{_('Actions')}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr class="author-row" data-id="{{entry[0].id}}">
+          <td style="vertical-align: middle;">
+            <span class="glyphicon glyphicon-plus-sign expand-author"
+              style="cursor: pointer; margin-right: 10px; font-size: 1.2em; color: #337ab7;"></span>
+            <a href="{{ url_for('web.books_list', data='author', sort_param='stored', book_id=entry[0].id) }}"
+              style="font-weight: bold; font-size: 1.1em;">{{entry[0].name}}</a>
+
+            <!-- Prefs right next to name -->
+            <span class="user-pref-container" style="margin-left: 10px;">
+              {% if pref_author_ids is defined %}
+              <span
+                class="glyphicon glyphicon-heart prefer-btn {% if pref_author_ids.get(entry[0].id) == 1 %}active-pref{% endif %}"
+                data-id="{{entry[0].id}}" data-type="2" title="{{ _('Prefer Author') }}"
+                style="color: {% if pref_author_ids.get(entry[0].id) == 1 %}#ff0000{% else %}#90ee90{% endif %}; cursor: pointer;"></span>
+              <span
+                class="glyphicon glyphicon-ban-circle ignore-btn {% if pref_author_ids.get(entry[0].id) == -1 %}active-pref{% endif %}"
+                data-id="{{entry[0].id}}" data-type="2" title="{{ _('Ignore Author') }}"
+                style="color: {% if pref_author_ids.get(entry[0].id) == -1 %}#ff0000{% else %}#90ee90{% endif %}; cursor: pointer; margin-left: 5px;"></span>
+              {% endif %}
+            </span>
+          </td>
+          <td style="vertical-align: middle;" class="hidden-xs">
+            <span class="badge">{{entry[1]}} {{_('Books')}}</span>
+          </td>
+          <td style="vertical-align: middle;">
+            <!-- ZIP -->
+            <a href="{{ url_for('web.bulk_download_author', author_id=entry[0].id) }}" class="btn btn-sm btn-default"
+              title="{{_('Download All (ZIP)')}}">
+              <span class="glyphicon glyphicon-download-alt"></span> ZIP
+            </a>
+          </td>
+        </tr>
+        <tr class="author-details-row" id="author-details-{{entry[0].id}}"
+          style="display:none; background-color: rgba(0,0,0,0.02);">
+          <td colspan="3" style="padding-left: 0; padding-right: 0; border-top: none;">
+            <div class="details-container" style="padding: 10px 10px 10px 30px;">
+              <div class="loading-placeholder text-muted"><span class="glyphicon glyphicon-refresh spinning"></span>
+                {{_('Loading...')}}</div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif entries and (entries[0].__tablename__ == 'books' if entries[0].__tablename__ is defined else
+  (entries[0][0].__tablename__ == 'books' if entries[0] is sequence else False)) %}
+  <!-- ADVANCED BOOK TABLE (Books, Unread, etc.) -->
+  <div class="col-xs-12">
+    <div class="row" id="adv-table-toolbar"
+      style="margin-bottom: 10px; background: #f5f5f5; padding: 10px; border-radius: 4px;">
+      <div class="col-xs-12">
+        <strong>{{_('Columns')}}:</strong>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-publisher"> {{_('Publisher')}}</label>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-language" checked> {{_('Language')}}</label>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-date" checked> {{_('Date')}}</label>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-rating" checked> {{_('Rating')}}</label>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-tags"> {{_('Tags')}}</label>
+      </div>
+    </div>
+
+    <table class="table table-striped table-hover" id="books-table">
+      <thead>
+        <tr>
+          <th style="width: 50px;">{{_('Cover')}}</th>
+          <th>{{_('Title')}}</th>
+          <th>{{_('Author')}}</th>
+          <th>{{_('Series')}}</th>
+          <th class="col-publisher hidden">{{_('Publisher')}}</th>
+          <th class="col-language">{{_('Language')}}</th>
+          <th class="col-date">{{_('Date')}}</th>
+          <th class="col-rating">{{_('Rating')}}</th>
+          <th class="col-tags hidden">{{_('Tags')}}</th>
+          <th>{{_('Actions')}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        {% set book = entry.Books if entry.Books is defined else (entry[0] if entry is sequence and entry is not string
+        else entry) %}
+        <tr>
+          <td>
+            <a href="{{ url_for('web.show_book', book_id=book.id) }}">
+              {% if book.has_cover %}
+              <img src="{{ url_for('web.get_cover', book_id=book.id) }}" style="max-height: 50px; max-width: 40px;">
+              {% else %}
+              <span class="glyphicon glyphicon-book" style="font-size: 2em;"></span>
+              {% endif %}
+            </a>
+          </td>
+          <td>
+            <a href="{{ url_for('web.show_book', book_id=book.id) }}"><strong>{{book.title}}</strong></a>
+            {% if (entry is sequence and entry|length > 2 and entry[2] == True) or (book.read_status is defined and
+            book.read_status == 1) %}
+            <span class="glyphicon glyphicon-ok text-success" title="{{_('Read')}}"></span>
+            {% endif %}
+          </td>
+          <td>
+            {% for author in book.authors %}
+            <a
+              href="{{url_for('web.books_list', data='author', sort_param='stored', book_id=author.id) }}">{{author.name.replace('|',',')}}</a>{%
+            if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td>
+            {% if book.series %}
+            <a
+              href="{{url_for('web.books_list', data='series', sort_param='stored', book_id=book.series[0].id )}}">{{book.series[0].name}}</a>
+            ({{book.series_index|formatfloat(2)}})
+            {% endif %}
+          </td>
+          <td class="col-publisher hidden">
+            {% for publisher in book.publishers %}
+            <a
+              href="{{url_for('web.books_list', data='publisher', sort_param='stored', book_id=publisher.id) }}">{{publisher.name}}</a>{%
+            if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td class="col-language">
+            {% for lang in book.languages %}
+            {{lang.lang_code}}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td class="col-date">{{book.pubdate|shortdate if book.pubdate else ''}}</td>
+          <td class="col-rating">
+            {% if book.ratings %}
+            <span class="glyphicon glyphicon-star"></span> {{ (book.ratings[0].rating / 2)|int }}
+            {% endif %}
+          </td>
+          <td class="col-tags hidden">
+            {% for tag in book.tags %}
+            <span class="label label-default">{{tag.name}}</span>
+            {% endfor %}
+          </td>
+          <td>
+            <a href="{{ url_for('web.download_link', book_id=book.id, book_format='epub') }}"
+              class="btn btn-xs btn-default" title="{{_('Download')}}"><span
+                class="glyphicon glyphicon-download-alt"></span></a>
+            {% if current_user.role_admin() %}
+            <a href="{{ url_for('web.edit_book', book_id=book.id) }}" class="btn btn-xs btn-primary"><span
+                class="glyphicon glyphicon-edit"></span></a>
+            {% endif %}
+
+            <span class="user-pref-container-inline">
+              {% if pref_book_ids is defined %}
+              <span
+                class="glyphicon glyphicon-heart prefer-btn {% if pref_book_ids.get(book.id) == 1 %}active-pref{% endif %}"
+                data-id="{{book.id}}" data-type="0" title="{{ _('Prefer Book') }}"
+                style="cursor: pointer; color: {% if pref_book_ids.get(book.id) == 1 %}#ff0000{% else %}#ccc{% endif %};"></span>
+              <span
+                class="glyphicon glyphicon-ban-circle ignore-btn {% if pref_book_ids.get(book.id) == -1 %}active-pref{% endif %}"
+                data-id="{{book.id}}" data-type="0" title="{{ _('Ignore Book') }}"
+                style="cursor: pointer; color: {% if pref_book_ids.get(book.id) == -1 %}#ff0000{% else %}#ccc{% endif %};"></span>
+              {% endif %}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif entries and entries[0][0].__class__.__name__ == 'Books' %}
+  <!-- BOOKS GRID VIEW (for Books in Series, etc.) -->
+  <div class="row" style="margin-top: 10px;">
+    {% for entry in entries %}
+    {% set book = entry[0] %}
+    <div class="col-sm-3 col-lg-2 col-xs-6 book" id="book_{{book.id}}">
+      <div class="cover">
+        <a href="{{ url_for('web.show_book', book_id=book.id) }}" data-toggle="modal" data-target="#bookDetailsModal"
+          data-remote="false">
+          {% if book.has_cover %}
+          <img src="{{ url_for('web.get_cover', book_id=book.id, resolution='og') }}" alt="{{ book.title }}"
+            loading="lazy" />
+          {% else %}
+          <img src="{{ url_for('static', filename='generic_cover.jpg') }}" alt="{{ book.title }}" />
+          {% endif %}
+        </a>
+        <div class="book-meta">
+          <p class="title">{{ book.title|shortentitle }}</p>
+          {% for author in book.authors %}
+          <p class="author"><a
+              href="{{ url_for('web.books_list', data='author', sort_param='stored', book_id=author.id) }}">{{author.name|shortentitle(30)}}</a>
+          </p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <!-- STANDARD LIST (Categories, Publishers, etc.) - REVERTED TO CLEAN LAYOUT -->
+  <div id="list" class="col-xs-12 col-sm-6">
+    {% for entry in entries %}
+    {% if loop.index0 == (loop.length/2+loop.length%2)|int and loop.length > 20 %}
+  </div>
+  <div id="second" class="col-xs-12 col-sm-6">
+    {% endif %}
+    <div class="row" {% if entry[0].sort %}data-name="{{entry[0].name}}" {% endif %}
+      data-id="{% if entry[0].sort %}{{entry[0].sort}}{% else %}{% if entry[0].format %}{{entry[0].format}}{% else %}{% if entry[0].rating %}{{entry[0].rating}}{% else %}{{entry[0].name}}{% endif %}{% endif %}{% endif %}"
+      {% if entry[0].series %}data-series-id="{{entry[0].series[0].id}}" {% endif %}>
+      <div class="col-xs-2 col-sm-2 col-md-1" align="left"><span class="badge">{{entry[1]}}</span></div>
+      <div class="col-xs-10 col-sm-10 col-md-11">
+        <a id="list_{{loop.index0}}"
+          href="{% if entry.format %}{{url_for('web.books_list', data=data, sort_param='stored', book_id=entry.format )}}{% else %}{{url_for('web.books_list', data=data, sort_param='stored', book_id=entry[0].id )}}{% endif %}">
+          {% if entry.name %}
+          {{entry.name}}
+          {% else %}
+          {% if entry.format %}{{entry.format}}{% else %}{{entry[0].name}}{% endif %}
+          {% endif %}
+        </a>
+        {% if data == 'series' and pref_series_ids is defined %}
+        <span class="user-pref-container-inline pull-right">
+          <span
+            class="glyphicon glyphicon-heart prefer-btn {% if pref_series_ids.get(entry[0].id) == 1 %}active-pref{% endif %}"
+            data-id="{{entry[0].id}}" data-type="1" title="{{ _('Prefer Series') }}"
+            style="cursor: pointer; margin-right: 5px; color: {% if pref_series_ids.get(entry[0].id) == 1 %}#ff0000{% else %}#ccc{% endif %};"></span>
+          <span
+            class="glyphicon glyphicon-ban-circle ignore-btn {% if pref_series_ids.get(entry[0].id) == -1 %}active-pref{% endif %}"
+            data-id="{{entry[0].id}}" data-type="1" title="{{ _('Ignore Series') }}"
+            style="cursor: pointer; color: {% if pref_series_ids.get(entry[0].id) == -1 %}#ff0000{% else %}#ccc{% endif %};"></span>
+        </span>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block js %}
+<script src="{{ url_for('static', filename='js/filter_list.js') }}"></script>
+<script>
+  $(document).ready(function () {
+    console.log("List View Loaded. Data: {{data}}");
+
+    // Toggle Columns for Advanced Table
+    $('.toggle-col').change(function () {
+      var colClass = $(this).data('col');
+      if ($(this).is(':checked')) {
+        $('.' + colClass).removeClass('hidden');
+      } else {
+        $('.' + colClass).addClass('hidden');
+      }
+    });
+
+    // Hierarchy View Logic
+    if ('{{data}}' === 'author') {
+      console.log("Author Hierarchy Script Initialized");
+
+      // Ensure event delegation works
+      $(document).on('click', '.expand-author', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        console.log("Hierarchy: Toggling Author expansion");
+        var $icon = $(this);
+        var $row = $icon.closest('tr');
+        var authorId = $row.data('id');
+        console.log("Hierarchy: Author ID from row:", authorId);
+
+        if (!authorId) {
+          console.error("Hierarchy: Could not find author ID on row!");
+          return;
+        }
+
+        var $detailsRow = $('#author-details-' + authorId);
+        if ($detailsRow.length === 0) {
+          console.error("Hierarchy: Could not find details row #author-details-" + authorId);
+          return;
+        }
+
+        var $container = $detailsRow.find('.details-container');
+        console.log("Hierarchy: Details Row found:", $detailsRow.length);
+
+        if ($detailsRow.is(':visible')) {
+          $detailsRow.hide();
+          $icon.removeClass('glyphicon-minus-sign').addClass('glyphicon-plus-sign');
+        } else {
+          $detailsRow.show();
+          $icon.removeClass('glyphicon-plus-sign').addClass('glyphicon-minus-sign');
+
+          if (!$container.data('loaded')) {
+            $container.html('<div class="text-muted"><span class="glyphicon glyphicon-refresh spinning"></span> {{_("Loading...")}}</div>');
+            var url = "{{ url_for('web.get_author_hierarchy', author_id=999999) }}".replace('999999', authorId.toString());
+            console.log("Hierarchy: AJAX request to", url);
+
+            $.get(url, function (data) {
+              if (data.success) {
+                var html = '<ul class="list-unstyled" style="padding-left:0;">';
+
+                // Series
+                $.each(data.series, function (i, s) {
+                  html += '<li style="margin-bottom: 5px;">';
+                  html += '<div class="series-node" style="padding: 5px; border-bottom: 1px dashed #eee;">';
+                  html += '  <span class="glyphicon glyphicon-plus-sign expand-series" data-sid="' + s.id + '" style="cursor: pointer; margin-right: 5px; color: #5bc0de;"></span>';
+                  html += '  <strong>' + s.name + '</strong> <span class="badge">' + s.count + '</span>';
+
+                  // Series Prefs
+                  var heartColor = s.pref_status == 1 ? '#ff0000' : '#90ee90';
+                  var banColor = s.pref_status == -1 ? '#ff0000' : '#90ee90';
+                  html += '  <span class="user-pref-container" style="margin-left: 10px;">';
+                  html += '    <span class="glyphicon glyphicon-heart prefer-btn ' + (s.pref_status == 1 ? 'active-pref' : '') + '" data-id="' + s.id + '" data-type="1" title="{{ _("Prefer Series") }}" style="color: ' + heartColor + '; cursor: pointer;"></span>';
+                  html += '    <span class="glyphicon glyphicon-ban-circle ignore-btn ' + (s.pref_status == -1 ? 'active-pref' : '') + '" data-id="' + s.id + '" data-type="1" title="{{ _("Ignore Series") }}" style="color: ' + banColor + '; cursor: pointer; margin-left:5px;"></span>';
+                  html += '  </span>';
+
+                  html += '  <a href="{{ url_for("web.bulk_download_series", series_id=888888) }}'.replace('888888', s.id) + '" class="btn btn-xs btn-default pull-right"><span class="glyphicon glyphicon-download-alt"></span></a>';
+                  html += '</div>';
+                  html += '<div class="series-books-container" id="series-books-' + s.id + '" style="display:none; padding-left: 20px; margin-top:5px;"></div>';
+                  html += '</li>';
+                });
+
+                // Standalone Books
+                if (data.books.length > 0) {
+                  html += '<li style="margin-top: 10px;"><strong>{{_("Standalone Books")}}</strong></li>';
+                  $.each(data.books, function (i, b) {
+                    html += '<li style="padding: 3px 0; padding-left: 20px;">';
+                    html += '  <a href="{{ url_for("web.show_book", book_id=777777) }}'.replace('777777', b.id) + '">' + b.title + '</a>';
+                    html += '  <a href="{{ url_for("web.download_link", book_id=666666, book_format="epub") }}'.replace('666666', b.id) + '" class="btn btn-xs btn-link pull-right" title="Download"><span class="glyphicon glyphicon-download"></span></a>';
+                    html += '</li>';
+                  });
+                }
+
+                html += '</ul>';
+                $container.html(html);
+                $container.data('loaded', true);
+              } else {
+                var errorMsg = data.error ? ': ' + data.error : '';
+                $container.html('<div class="text-danger">{{_("Error loading details")}}' + errorMsg + '</div>');
+              }
+            });
+          }
+        }
+      });
+
+      // Expand Series
+      $(document).on('click', '.expand-series', function () {
+        var $icon = $(this);
+        var sid = $icon.data('sid');
+        var $container = $('#series-books-' + sid);
+
+        if ($container.is(':visible')) {
+          $container.hide();
+          $icon.removeClass('glyphicon-minus-sign').addClass('glyphicon-plus-sign');
+        } else {
+          $container.show();
+          $icon.removeClass('glyphicon-plus-sign').addClass('glyphicon-minus-sign');
+
+          if (!$container.data('loaded')) {
+            $container.html('<div class="text-muted"><span class="glyphicon glyphicon-refresh spinning"></span> {{_("Loading...")}}</div>');
+            var s_url = "{{ url_for('web.get_series_books_ajax', series_id=555555) }}".replace('555555', sid);
+            $.get(s_url, function (data) {
+              if (data.success) {
+                var html = '<ul class="list-unstyled">';
+                $.each(data.books, function (i, b) {
+                  var idx = b.series_index ? '<strong>' + b.series_index + '</strong>. ' : '';
+                  html += '<li style="padding: 3px 0;">';
+                  html += idx;
+                  html += '  <a href="{{ url_for("web.show_book", book_id=444444) }}'.replace('444444', b.id) + '">' + b.title + '</a>';
+                  html += '  <span class="pull-right">';
+                  html += '    <a href="{{ url_for("web.download_link", book_id=333333, book_format="epub") }}'.replace('333333', b.id) + '" class="btn btn-xs btn-link"><span class="glyphicon glyphicon-download"></span></a>';
+                  html += '  </span>';
+                  html += '</li>';
+                });
+                html += '</ul>';
+                $container.html(html);
+                $container.data('loaded', true);
+              }
+            });
+          }
+        }
+      });
+    }
+
+    // View Toggle Handler
+    $('.toggle-view').click(function () {
+      var view = $(this).data('view');
+      var page = '{{page}}';
+      $.ajax({
+        url: "{{ url_for('web.update_view') }}",
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ [page]: { view_type: view } }),
+        success: function () {
+          location.reload();
+        }
+      });
+    });
+  });
+</script>
+{% endblock %}
