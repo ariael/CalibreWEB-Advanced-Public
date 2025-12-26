@@ -9,6 +9,7 @@ import sqlite3
 from flask import Blueprint, request, flash, redirect, url_for
 from flask_babel import gettext as _
 from flask_login import login_required, current_user
+from sqlalchemy import and_
 from . import db, ub, helper, calibre_db
 
 mobile = Blueprint('mobile', __name__, url_prefix='/mobile')
@@ -200,7 +201,7 @@ def sync_readera_usb():
     return count, found
 
 
-def process_librera_progress(data):
+def process_librera_progress(data, user=None):
     count = 0
     from datetime import datetime
     for file_path, progress_data in data.items():
@@ -212,70 +213,71 @@ def process_librera_progress(data):
         
         filename = os.path.basename(file_path)
         base_name, _ = os.path.splitext(filename)
-        update_book_progress(base_name, percentage)
-        count += 1
+        if update_book_progress(base_name, percentage, user):
+            count += 1
     ub.session.commit()
     return count
 
-def process_moon_progress(file_path):
-    # .mrpro is a zip file. Inside: /com.flyersoft.moonreaderp/ ... .db? Or just .po files?
-    # Usually it contains a database file or .po files.
-    # Let's unzip and look.
+def process_moon_progress(file_path, user=None):
     count = 0
+    import zipfile
+    import sqlite3
+    import tempfile
+    import shutil
+    
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             with zipfile.ZipFile(file_path, 'r') as zip_ref:
                 zip_ref.extractall(tmpdir)
                 
-            # Look for *.db files
-            db_path = None
+            # Moon+ Reader backups usually contain a .db file
+            db_file = None
             for root, dirs, files in os.walk(tmpdir):
-                for file in files:
-                    if file.endswith('.db'):
-                        # Check table structure?
-                        db_path = os.path.join(root, file)
+                for f in files:
+                    if f.endswith('.db'):
+                        db_file = os.path.join(root, f)
                         break
-                if db_path: break
-            
-            if db_path:
-                # Process SQLite
-                conn = sqlite3.connect(db_path)
-                c = conn.cursor()
-                # Table usually 'books' or 'items'
-                # Columns: filename, percentage (or other)
-                # Moon+ usually uses a unique hash or path.
-                try:
-                    c.execute("SELECT _id, filename, percentage FROM books") # Hypothetical
-                    # Actually Moon+ DB structure varies.
-                    # Commonly table 'book_data' or similar. 
-                    # Let's try to list tables first to be safe if we were debugging?
-                    # Assuming standard structure for now based on common knowledge
-                    # Often table is 'items' with '_id', 'path', 'percentage'
-                    pass
-                except:
-                     # Fallback or detailed implementation needed.
-                     # For this MVP, let's assume we can't fully parse proprietary DB without exact schema.
-                     # But actually, .po files are easier?
-                     pass
-                conn.close()
-                pass
+                if db_file: break
                 
-            # Alternative: .po files (Progress Object?)
-            # Actually Moon+ creates .po files for each book `BookName.epub.po` in hidden folder?
-            # .mrpro is backup.
+            if db_file:
+                # Some versions use 'items' table, some 'books'
+                conn = sqlite3.connect(db_file)
+                cursor = conn.cursor()
+                
+                # Check for table 'items' (Moon+ Reader Pro standard)
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name='items' OR name='books')")
+                table_name = cursor.fetchone()
+                if table_name:
+                    table = table_name[0]
+                    # Columns: originalName (or filename), percentage
+                    cursor.execute(f"PRAGMA table_info({table})")
+                    columns = {col[1] for col in cursor.fetchall()}
+                    
+                    name_col = "originalName" if "originalName" in columns else "filename" if "filename" in columns else "title"
+                    perc_col = "percentage" if "percentage" in columns else "progress"
+                    
+                    if name_col in columns and perc_col in columns:
+                        cursor.execute(f"SELECT {name_col}, {perc_col} FROM {table}")
+                        rows = cursor.fetchall()
+                        for name, percentage in rows:
+                            if percentage and percentage > 0:
+                                # percentage is usually float 0-100 or int
+                                p = int(float(percentage))
+                                if update_book_progress(name, p, user):
+                                    count += 1
+                conn.close()
+        except Exception as e:
+            helper.log.error(f"Error parsing Moon+ Reader backup: {e}")
             
-            # Let's try to find any file that looks like a book record.
-            # If complex, return 0 for now until Schema confirmed.
-            pass
-            
-        except zipfile.BadZipFile:
-            pass
-            
+    ub.session.commit()
     return count
 
-def process_readera_progress(file_path):
-    # .bak is zip -> library.json
+def process_readera_progress(file_path, user=None):
     count = 0
+    import zipfile
+    import json
+    import tempfile
+    
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             with zipfile.ZipFile(file_path, 'r') as zip_ref:
@@ -283,33 +285,71 @@ def process_readera_progress(file_path):
             
             json_path = os.path.join(tmpdir, 'library.json')
             if os.path.exists(json_path):
-                 with open(json_path, 'r', encoding='utf-8') as f:
+                with open(json_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    # Parse data
-                    # Structure: "books": [ { "filename": "...", "progress": ... } ]
-                    # Need real schema.
-                    pass
-        except: pass
+                    # ReadEra 'books' list
+                    books_data = data.get('books', [])
+                    for b in books_data:
+                        # title, author, reading_percentage
+                        title = b.get('title')
+                        author = b.get('author')
+                        percentage = b.get('reading_percentage', 0)
+                        
+                        search_name = f"{title} - {author}" if author else title
+                        if percentage > 0:
+                            if update_book_progress(search_name, int(percentage), user):
+                                count += 1
+        except Exception as e:
+            helper.log.error(f"Error parsing ReadEra backup: {e}")
+            
+    ub.session.commit()
     return count
 
-def update_book_progress(search_name, percentage):
+def update_book_progress(search_name, percentage, user=None):
+    # Clean name: remove extensions, underscores, and common Calibre-style segments
     search_name = search_name.replace('_', ' ').strip()
-    books = calibre_db.session.query(db.Books).filter(db.Books.title.ilike(search_name)).all()
+    for ext in ['.epub', '.mobi', '.azw3', '.pdf', '.docx', '.html', '.txt']:
+        if search_name.lower().endswith(ext):
+            search_name = search_name[:-len(ext)].strip()
+            
+    # Try extracting Calibre ID from name if it follows "Title (ID)" pattern
+    import re
+    id_match = re.search(r'\((\d+)\)$', search_name)
+    if id_match:
+        book_id = int(id_match.group(1))
+        book = calibre_db.session.query(db.Books).filter(db.Books.id == book_id).first()
+        if book:
+            books = [book]
+            
+    # Try exact match first
+    if not books:
+        books = calibre_db.session.query(db.Books).filter(db.Books.title.ilike(search_name)).all()
+    
+    # Try splitting if it's "Title - Author" format
     if not books and ' - ' in search_name:
         parts = search_name.split(' - ')
-        books = calibre_db.session.query(db.Books).filter(db.Books.title.ilike(parts[0])).all()
+        # Try title part
+        books = calibre_db.session.query(db.Books).filter(db.Books.title.ilike(parts[0].strip())).all()
+        # If still no, try matching both Title AND Author for precision
         if not books and len(parts) > 1:
-            books = calibre_db.session.query(db.Books).filter(db.Books.title.ilike(parts[1])).all()
+            books = calibre_db.session.query(db.Books).join(db.books_authors_link).join(db.Authors).filter(
+                and_(db.Books.title.ilike(parts[0].strip()), db.Authors.name.ilike(f"%{parts[1].strip()}%"))
+            ).all()
             
     if books:
         book = books[0]
+        # Fallback to current_user if no specific user provided (for manual uploads)
+        target_user = user or current_user
+        if not target_user:
+            return False
+
         current_status = ub.session.query(ub.ReadBook).filter(
-            ub.ReadBook.user_id == current_user.id,
+            ub.ReadBook.user_id == target_user.id,
             ub.ReadBook.book_id == book.id
         ).first()
         
         if not current_status:
-            current_status = ub.ReadBook(user_id=current_user.id, book_id=book.id)
+            current_status = ub.ReadBook(user_id=target_user.id, book_id=book.id)
             ub.session.add(current_status)
         
         status = ub.ReadBook.STATUS_IN_PROGRESS
@@ -321,3 +361,37 @@ def update_book_progress(search_name, percentage):
         current_status.read_status = status
         from datetime import datetime
         current_status.last_modified = datetime.utcnow()
+        return True
+    return False
+def auto_sync_mobile_progress():
+    """Background task to scan user-defined folders for progress files"""
+    users = ub.session.query(ub.User).filter(ub.User.mobile_sync_path != "").all()
+    for user in users:
+        path = user.mobile_sync_path
+        if not os.path.isdir(path):
+            continue
+            
+        helper.log.debug(f"Auto-sync: Scanning {path} for user {user.name}")
+        
+        # 1. Librera (app-Progress.json)
+        # Search recursively or in known subpaths
+        for root, dirs, files in os.walk(path):
+            for f in files:
+                f_path = os.path.join(root, f)
+                
+                # Librera
+                if f == 'app-Progress.json':
+                    try:
+                        with open(f_path, 'r', encoding='utf-8') as jf:
+                            process_librera_progress(json.load(jf), user)
+                    except: pass
+                
+                # Moon+ (.mrpro or .po)
+                elif f.endswith('.mrpro'):
+                    process_moon_progress(f_path, user)
+                
+                # ReadEra (.bak)
+                elif f.endswith('.bak'):
+                    process_readera_progress(f_path, user)
+    
+    ub.session.commit()

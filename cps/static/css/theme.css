@@ -26,6 +26,81 @@
     --bg-secondary: #222222;
     --accent-color: #7a1a1a;
     --text-primary: #777777;
+    --text-secondary: #555555;
+    --nav-bg: #1a1a1a;
+}
+
+/* ============================
+   New Themes (Requested)
+   ============================ */
+
+/* 1. Dark - Midnight Blue */
+[data-theme="cali_dark_blue"] {
+    --bg-primary: #050510;
+    --bg-secondary: #0f0f20;
+    --accent-color: #3a7bd5;
+    --text-primary: #d0d5e0;
+    --text-secondary: #8a9bb0;
+    --card-border: rgba(58, 123, 213, 0.2);
+    --nav-bg: #070715;
+}
+
+/* 2. Dark - Forest */
+[data-theme="cali_dark_forest"] {
+    --bg-primary: #0a110a;
+    --bg-secondary: #141f14;
+    --accent-color: #43a047;
+    --text-primary: #dceddd;
+    --text-secondary: #7a9e7c;
+    --card-border: rgba(67, 160, 71, 0.2);
+    --nav-bg: #0e160e;
+}
+
+/* 3. Dark - Slate */
+[data-theme="cali_dark_slate"] {
+    --bg-primary: #181b1f;
+    --bg-secondary: #21252b;
+    --accent-color: #61afef;
+    --text-primary: #abb2bf;
+    --text-secondary: #5c6370;
+    --card-border: rgba(255, 255, 255, 0.05);
+    --nav-bg: #1c2129;
+}
+
+/* 4. Medium - Sepia */
+[data-theme="cali_medium_sepia"] {
+    --bg-primary: #f4ecd8;
+    --bg-secondary: #eaddcf;
+    --accent-color: #8d6e63;
+    --text-primary: #4e342e;
+    --text-secondary: #795548;
+    --card-border: rgba(141, 110, 99, 0.2);
+    --card-shadow: 0px 4px 10px rgba(93, 64, 55, 0.15);
+    --nav-bg: #eaddcf;
+}
+
+/* 5. Light - Standard */
+[data-theme="cali_light_grey"] {
+    --bg-primary: #f5f5f5;
+    --bg-secondary: #ffffff;
+    --accent-color: #1976d2;
+    --text-primary: #212121;
+    --text-secondary: #757575;
+    --card-border: rgba(0, 0, 0, 0.05);
+    --card-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+    --nav-bg: #ffffff;
+}
+
+/* 6. Light - Solar */
+[data-theme="cali_light_solar"] {
+    --bg-primary: #fdf6e3;
+    --bg-secondary: #eee8d5;
+    --accent-color: #b58900;
+    --text-primary: #586e75;
+    --text-secondary: #93a1a1;
+    --card-border: rgba(181, 137, 0, 0.15);
+    --card-shadow: 0px 2px 6px rgba(181, 137, 0, 0.1);
+    --nav-bg: #eee8d5;
 }
 
 /* Apply variables to core elements */
@@ -76,4 +151,73 @@ body {
     background-color: var(--accent-color) !important;
     box-shadow: none;
     transition: width .6s ease;
+}
+
+/* 7. Dark - Retro Terminal */
+[data-theme="cali_dark_terminal"] {
+    --bg-primary: #000000;
+    --bg-secondary: #0c0c0c;
+    --accent-color: #00ff00;
+    --text-primary: #00ff00;
+    --text-secondary: #00cc00;
+    --card-border: #00ff00;
+    --card-shadow: 0px 0px 10px rgba(0, 255, 0, 0.2);
+    --nav-bg: #000000;
+}
+
+/* 8. Dark - Nord (Kavita inspired) */
+[data-theme="cali_nord"] {
+    --bg-primary: #2e3440;
+    --bg-secondary: #3b4252;
+    --accent-color: #81a1c1;
+    --text-primary: #eceff4;
+    --text-secondary: #d8dee9;
+    --card-border: rgba(129, 161, 193, 0.2);
+    --card-shadow: 0px 4px 15px rgba(0, 0, 0, 0.4);
+    --nav-bg: #3b4252;
+}
+
+/* 9. Dark - Plex (Kavita inspired) */
+[data-theme="cali_plex"] {
+    --bg-primary: #1c1c1c;
+    --bg-secondary: #262626;
+    --accent-color: #4ac694;
+    /* Signature Plex Green */
+    --text-primary: #ffffff;
+    --text-secondary: #999999;
+    --card-border: rgba(74, 198, 148, 0.2);
+    --card-shadow: 0px 10px 30px rgba(0, 0, 0, 0.6);
+    --nav-bg: rgba(0, 0, 0, 0.85);
+}
+
+/* Special effect for Plex theme background if possible */
+[data-theme="cali_plex"] body {
+    background: radial-gradient(circle at 20% 20%, #1c1c1c 0%, #000000 100%) fixed;
+}
+
+[data-theme="cali_plex"] .navbar {
+    background: rgba(0, 0, 0, 0.7) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(74, 198, 148, 0.3);
+}
+
+[data-theme="cali_plex"] .book-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 3px solid var(--accent-color);
+    transform: rotate(0deg) !important;
+    /* Plex is cleaner */
+}
+
+[data-theme="cali_nord"] .book-card {
+    background: var(--bg-secondary);
+    border: 1px solid rgba(129, 161, 193, 0.3);
+    border-radius: 8px;
+    transform: rotate(0deg) !important;
+}
+
+[data-theme="cali_nord"] .navbar {
+    border-bottom: 3px solid var(--accent-color);
 }

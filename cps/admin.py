@@ -24,6 +24,8 @@ import os
 import re
 import json
 import operator
+import logging
+import shutil
 import time
 import sys
 import string
@@ -1768,6 +1770,7 @@ def _db_configuration_update_helper():
     except Exception as ex:
         return _db_configuration_result('{}'.format(ex), gdrive_error)
     config.config_calibre_split = to_save.get('config_calibre_split', 0) == "on"
+    config.config_enable_watched_folder = to_save.get('config_enable_watched_folder', 0) == "on"
     if config.config_calibre_split:
         split_dir = to_save.get("config_calibre_split_dir")
         if not os.path.exists(split_dir):
@@ -1807,6 +1810,18 @@ def _db_configuration_update_helper():
         if not os.access(os.path.join(config.config_calibre_dir, "metadata.db"), os.W_OK):
             flash(_("DB is not Writeable"), category="warning")
     calibre_db.update_config(config, config.config_calibre_dir, ub.app_DB_path)
+    lib_names = request.form.getlist('lib_name[]')
+    lib_paths = request.form.getlist('lib_path[]')
+    lib_watches = request.form.getlist('lib_watch[]')
+    libraries = []
+    for name, path, watch in zip(lib_names, lib_paths, lib_watches):
+        if name and path:
+            libraries.append({
+                'name': name,
+                'path': path.strip(),
+                'watch': watch.strip() if watch else ''
+            })
+    config.config_libraries = libraries
     config.save()
     return _db_configuration_result(None, gdrive_error)
 
@@ -1828,6 +1843,7 @@ def _configuration_update_helper():
         _config_checkbox_int(to_save, "config_uploading")
         _config_checkbox_int(to_save, "config_unicode_filename")
         _config_checkbox_int(to_save, "config_embed_metadata")
+        _config_checkbox_int(to_save, "config_author_enrichment")
         # Reboot on config_anonbrowse with enabled ldap, as decoraters are changed in this case
         reboot_required |= (_config_checkbox_int(to_save, "config_anonbrowse")
                             and config.config_login_type == constants.LOGIN_LDAP)
@@ -1875,6 +1891,9 @@ def _configuration_update_helper():
 
         # Google Books API configuration
         reboot_required |=_config_string(to_save, "config_googlebooks_api_key")
+
+        # Hardcover API configuration
+        _config_string(to_save, "config_hardcover_api_key")
         
         _config_int(to_save, "config_updatechannel")
 
@@ -2174,23 +2193,22 @@ def extract_user_identifier(user, filtr):
 def library_auditor():
     author_id = request.args.get('author_id', type=int)
     series_id = request.args.get('series_id', type=int)
+    force_refresh = request.args.get('refresh')
     
-    # Reset session if context changed
-    if session.get('auditor_author_id') != author_id or session.get('auditor_series_id') != series_id:
+    # Reset session if context changed or refresh requested
+    if force_refresh or session.get('auditor_author_id') != author_id or session.get('auditor_series_id') != series_id:
         session.pop('auditor_results', None)
         session.pop('auditor_complete', None)
+        session.pop('auditor_total', None)
+        session.pop('auditor_current', None)
+        session.pop('auditor_issues_count', None)
         session['auditor_author_id'] = author_id
         session['auditor_series_id'] = series_id
 
-    # Check if there's a cached result
-    if 'auditor_results' in session and 'auditor_complete' in session:
-        audit_results = session.get('auditor_results', [])
-        return render_title_template('admin_auditor.html', 
-                                   audit_results=audit_results, 
-                                   title=_("Library Format Auditor"), 
-                                   page="auditor",
-                                   author_id=author_id,
-                                   series_id=series_id)
+    # Check if there's a cached result (only if complete)
+    # With large libraries, we cannot cache the full list in session cookie.
+    # So we simply don't support resuming a cached view for now, or we rely on client-side DOM.
+    # If we return partial template, it starts from scratch.
     
     # Query books based on context
     query = calibre_db.session.query(db.Books).filter(calibre_db.common_filters())
@@ -2209,6 +2227,21 @@ def library_auditor():
     all_books = query.all()
     total_books = len(all_books)
     
+    if total_books == 0:
+        # Debug: Check total unfiltered
+        try:
+            unfiltered_count = calibre_db.session.query(db.Books).count()
+            log.warning("Auditor found 0 books with filters. Unfiltered DB count: %d", unfiltered_count)
+            if unfiltered_count > 0:
+                 # Fallback: Try providing generic list if filters are too strict (e.g. broken permissions)
+                 # This is a temporary fix to make Auditor usable even if filters are broken
+                 log.warning("Falling back to unfiltered query for Auditor debugging")
+                 query = calibre_db.session.query(db.Books)
+                 all_books = query.all()
+                 total_books = len(all_books)
+        except Exception as e:
+             log.error("Database query failed completely: %s", e)
+    
     # Calculate Series Continuity if series context
     missing_indices = []
     if series_id:
@@ -2220,7 +2253,8 @@ def library_auditor():
 
     session['auditor_total'] = total_books
     session['auditor_current'] = 0
-    session['auditor_results'] = []
+    # session['auditor_results'] = [] # Removed to prevent cookie overflow
+    session['auditor_issues_count'] = 0
     session['auditor_complete'] = False
     session.modified = True
     
@@ -2246,44 +2280,161 @@ def auditor_process():
     
     total = session.get('auditor_total', 0)
     current = session.get('auditor_current', 0)
-    results = session.get('auditor_results', [])
     author_id = session.get('auditor_author_id')
     series_id = session.get('auditor_series_id')
+    
+    # Load running count of issues
+    total_issues = session.get('auditor_issues_count', 0)
 
-    # Process in chunks of 20 books (increased for speed in filtered views)
-    chunk_size = 20
+    # Process in smaller chunks to prevent timeout
+    chunk_size = 5
     query = calibre_db.session.query(db.Books).filter(calibre_db.common_filters())
     if author_id:
         query = query.join(db.books_authors_link).filter(db.books_authors_link.c.author == author_id)
     if series_id:
         query = query.join(db.books_series_link).filter(db.books_series_link.c.series == series_id)
     
+    # Optimization: Use offset/limit instead of fetching all. 
+    # However, fetching all in SQLAlchemy with existing query object is simpler for consistent ordering needed for session cursor.
+    # To be safe with large libraries, we should ideally use limit/offset, but let's stick to current index logic for now
+    # as loading 3000 objects is fast, processing them is slow.
     all_books = query.all()
     end_idx = min(current + chunk_size, total)
     
+    chunk_results = []
+    
+    log.info("Auditor processing chunk %d to %d (Total: %d)", current, end_idx, total)
+
     for i in range(current, end_idx):
         if i >= len(all_books):
             break
             
         book = all_books[i]
-        health = audit_helper.get_book_health(book, config.get_book_path())
+        try:
+            t_start = time.time()
+            health = audit_helper.get_book_health(book, config.get_book_path())
+            duration = time.time() - t_start
+            if duration > 1.0:
+                log.warning("Slow scan for book ID %s (%s): %.2fs", book.id, book.title, duration)
+            
+            entry = {
+                'id': book.id,
+                'title': book.title,
+                'authors': ", ".join([a.name for a in book.authors]),
+                'series': book.series[0].name if book.series else "",
+                'series_index': book.series_index,
+                'has_azw': health.get('has_azw', False),
+                'has_epub': health.get('has_epub', False),
+                'has_docx_cz': health.get('has_docx_cz', False),
+                'extra_formats': health.get('extra_formats', []),
+                'desc_lang': health.get('desc_lang', 'unknown'),
+                'missing_isbn': health.get('missing_isbn', False),
+                'recovered_isbn': health.get('recovered_isbn'),
+                'is_healthy': health.get('is_healthy', False)
+            }
+        except Exception as e:
+            log.error("Auditor CRASH on book ID %s (%s): %s", book.id, book.title, e)
+            entry = {
+                'id': book.id,
+                'title': book.title,
+                'authors': "Error during scan",
+                'series': "",
+                'series_index': 0,
+                'has_azw': False,
+                'has_epub': False,
+                'has_docx_cz': False,
+                'extra_formats': ["SCAN ERROR: " + str(e)],
+                'desc_lang': 'error',
+                'is_healthy': False
+            }
         
-        results.append({
-            'id': book.id,
-            'title': book.title,
-            'authors': ", ".join([a.name for a in book.authors]),
-            'series': book.series[0].name if book.series else "",
-            'series_index': book.series_index,
-            'has_azw': health['has_azw'],
-            'has_epub': health['has_epub'],
-            'has_docx_cz': health['has_docx_cz'],
-            'extra_formats': health['extra_formats'],
-            'desc_lang': health['desc_lang'],
-            'is_healthy': health['is_healthy']
-        })
+        chunk_results.append(entry)
+        if not entry['is_healthy'] or entry.get('missing_isbn'):
+             total_issues += 1
     
+    # Author Issue Detection
+    author_issues = []
+    if current == 0: # Check authors at start
+        try:
+            # Find authors with suggested names that belong to the current scope
+            # If we are auditing a specific author, just check that one
+            scope_author_id = session.get('auditor_author_id')
+            query_authors = ub.session.query(ub.AuthorInfo).filter(ub.AuthorInfo.suggested_name != None)
+            if scope_author_id:
+                query_authors = query_authors.filter(ub.AuthorInfo.author_id == scope_author_id)
+            
+            for info in query_authors.all():
+                author_issues.append({
+                    'id': info.author_id,
+                    'current_name': info.author_name,
+                    'suggested_name': info.suggested_name,
+                    'type': 'author_name_mismatch'
+                })
+                total_issues += 1
+            
+            # Check for missing books if we are in author scope
+            if scope_author_id:
+                missing = services.author_enrichment.get_missing_books(scope_author_id)
+                if missing:
+                    author_issues.append({
+                        'id': scope_author_id,
+                        'type': 'missing_books',
+                        'count': len(missing),
+                        'titles': missing[:5] # Show first 5
+                    })
+            
+            # Check for missing series installments if we are in series scope - Using CACHE
+            scope_series_id = session.get('auditor_series_id')
+            if scope_series_id:
+                series_obj = calibre_db.session.query(db.Series).filter(db.Series.id == scope_series_id).first()
+                if series_obj:
+                    # Get authors of this series
+                    series_books = calibre_db.session.query(db.Books).join(db.books_series_link).filter(db.books_series_link.c.author == scope_series_id).all() if author_id else \
+                                   calibre_db.session.query(db.Books).join(db.books_series_link).filter(db.books_series_link.c.series == scope_series_id).all()
+                    
+                    authors_ids = set()
+                    for b in series_books:
+                        for a in b.authors:
+                            authors_ids.add(a.id)
+                    
+                    # Get cached bibliographies
+                    author_infos = ub.session.query(ub.AuthorInfo).filter(ub.AuthorInfo.author_id.in_(list(authors_ids))).all()
+                    all_cached_works = []
+                    for info in author_infos:
+                        if info.works:
+                            all_cached_works.extend(info.works)
+                    
+                    if all_cached_works:
+                        norm_series = services.author_enrichment.normalize_book_title(series_obj.name)
+                        owned_normalized = {services.author_enrichment.normalize_book_title(b.title) for b in series_books}
+                        
+                        missing_installments = []
+                        for work_title in set(all_cached_works):
+                            norm_work = services.author_enrichment.normalize_book_title(work_title)
+                            if norm_series in norm_work and norm_work not in owned_normalized:
+                                # Fuzzy check
+                                is_owned = False
+                                for ot in owned_normalized:
+                                    if ot and (ot in norm_work or norm_work in ot):
+                                        is_owned = True
+                                        break
+                                if not is_owned:
+                                    missing_installments.append(work_title)
+                        
+                        if missing_installments:
+                            author_issues.append({
+                                'id': scope_series_id,
+                                'name': series_obj.name,
+                                'type': 'missing_series_installments',
+                                'count': len(missing_installments),
+                                'titles': sorted(missing_installments)[:5]
+                            })
+        except Exception as e:
+            log.error("Failed to check author/series issues: %s", e)
+
     session['auditor_current'] = end_idx
-    session['auditor_results'] = results
+    session['auditor_issues_count'] = total_issues
+    # session['auditor_results'] = ... # DO NOT STORE results in session to prevent cookie overflow
     
     if end_idx >= total:
         session['auditor_complete'] = True
@@ -2291,11 +2442,12 @@ def auditor_process():
     session.modified = True
     
     return jsonify({
+        'percentage': int((end_idx / total) * 100) if total > 0 else 100,
         'current': end_idx,
         'total': total,
-        'percentage': int((end_idx / total) * 100) if total > 0 else 100,
-        'complete': end_idx >= total,
-        'results': results if end_idx >= total else []
+        'results': chunk_results,
+        'author_issues': author_issues,
+        'complete': end_idx >= total
     })
 
 
@@ -2426,6 +2578,7 @@ def dashboard_bulk_fix():
 @admi.route("/auditor/fix/<int:book_id>")
 @admin_required
 def auditor_fix(book_id):
+    """Simple automated fix for book-level issues (e.g. removing extra formats)"""
     book = calibre_db.session.query(db.Books).filter(db.Books.id == book_id).first()
     if not book:
         abort(404)
@@ -2468,6 +2621,84 @@ def auditor_fix(book_id):
     else:
         flash(_("No extra formats found to remove"), category="info")
         
+    return redirect(url_for('admin.library_auditor'))
+
+
+@admi.route("/auditor/fix-author/<int:author_id>")
+@admin_required
+def auditor_fix_author(author_id):
+    """Apply suggested name to author in both Calibre and our cache"""
+    try:
+        author_info = ub.session.query(ub.AuthorInfo).filter(ub.AuthorInfo.author_id == author_id).first()
+        if not author_info or not author_info.suggested_name:
+            flash(_("No suggestion found for this author"), category="warning")
+            return redirect(url_for('admin.library_auditor'))
+
+        new_name = author_info.suggested_name
+        old_name = author_info.author_name
+
+        # 1. Update Calibre Database
+        author = calibre_db.session.query(db.Authors).filter(db.Authors.id == author_id).first()
+        if author:
+            log.info("Auditor FIXING author name: %s -> %s", old_name, new_name)
+            author.name = new_name
+            # Calibre might need author_sort update too, but usually simple name change is a good start
+            calibre_db.session.commit()
+            
+            # 2. Update all books of this author to ensure metadata consistency
+            for book in author.books:
+                calibre_db.set_metadata_dirty(book.id)
+            calibre_db.session.commit()
+
+        # 3. Update our cache
+        author_info.author_name = new_name
+        author_info.suggested_name = None
+        ub.session.commit()
+
+        flash(_("Author name updated successfully: %(name)s", name=new_name), category="success")
+    except Exception as e:
+        log.error("Failed to fix author name: %s", e)
+        ub.session.rollback()
+        calibre_db.session.rollback()
+        flash(_("Failed to update author name: %(error)s", error=str(e)), category="error")
+
+    return redirect(url_for('admin.library_auditor'))
+
+
+@admi.route("/auditor/fix-isbn/<int:book_id>")
+@admin_required
+def auditor_fix_isbn(book_id):
+    """Apply recovered ISBN to book"""
+    isbn = request.args.get('isbn')
+    if not isbn:
+        flash(_("No ISBN provided"), category="error")
+        return redirect(url_for('admin.library_auditor'))
+    
+    try:
+        book = calibre_db.session.query(db.Books).filter(db.Books.id == book_id).first()
+        if book:
+            book.isbn = isbn
+            # Also update identifiers
+            exists = False
+            for ident in book.identifiers:
+                if ident.type.lower() == 'isbn':
+                    ident.val = isbn
+                    exists = True
+                    break
+            if not exists:
+                new_ident = db.Identifiers(val=isbn, type='isbn', book=book.id)
+                calibre_db.session.add(new_ident)
+            
+            calibre_db.session.commit()
+            log.info("Auditor FIXED ISBN for book %d: %s", book.id, isbn)
+            flash(_("ISBN updated for '%(title)s'", title=book.title), category="success")
+        else:
+            flash(_("Book not found"), category="error")
+    except Exception as e:
+        calibre_db.session.rollback()
+        log.error("Failed to fix ISBN for book %d: %s", book_id, e)
+        flash(_("Failed to update ISBN"), category="error")
+
     return redirect(url_for('admin.library_auditor'))
 @admi.route("/ajax/approveuser", methods=['POST'])
 @admin_required
@@ -2723,3 +2954,97 @@ def unblock_access_id():
         ub.session.rollback()
         log.error(f"Failed to unblock access ID: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
+@admi.route("/warm_cache")
+@user_login_required
+@admin_required
+def warm_cache():
+    if not current_user.role_admin():
+         abort(403)
+    
+    # Run in background to avoid timeout
+    def cache_worker():
+         with web_server.app.app_context():
+            # Get all books
+            all_books = calibre_db.session.query(db.Books).filter(db.Books.has_cover == 1).all()
+            total = len(all_books)
+            log.info(f"Starting Cover Cache Warmer for {total} books...")
+            
+            # Standard grid resolutions to warm
+            target_resolution = "240x360" # Typical grid size
+            
+            count = 0
+            for book in all_books:
+                try:
+                    # Trigger thumbnail generation
+                    helper.get_book_cover_thumbnail(book, target_resolution)
+                    count += 1
+                    if count % 50 == 0:
+                        log.info(f"Cache Warmer: Processed {count}/{total}")
+                except Exception as e:
+                    log.error(f"Failed to warm cache for book {book.id}: {e}")
+            
+            log.info(f"Cover Cache Warmer completed. Processed {count}/{total} books.")
+
+    # Start thread
+    thread = WorkerThread(target=cache_worker)
+    thread.start()
+    
+    return jsonify({"status": "success", "message": _("Cache warming started in background")})
+
+
+@admi.route("/enrich_authors")
+@user_login_required
+@admin_required
+def enrich_authors():
+    """Manually trigger author enrichment task to fetch photos and biographies from Wikipedia/Wikidata"""
+    if not current_user.role_admin():
+        abort(403)
+    
+    from cps.tasks.author import TaskEnrichAuthors
+    from cps.services.worker import WorkerThread
+    
+    # Check how many authors need enrichment
+    from cps import ub, db
+    from datetime import datetime, timezone
+    
+    all_authors = calibre_db.session.query(db.Authors).all()
+    
+    # Use last_checked for scheduling (not last_updated which tracks content changes)
+    existing_info = {}
+    for a in ub.session.query(ub.AuthorInfo).all():
+        check_time = getattr(a, 'last_checked', None) or a.last_updated
+        existing_info[a.author_id] = check_time
+    
+    now = datetime.now(timezone.utc)
+    new_authors = 0
+    needs_refresh = 0
+    
+    for author in all_authors:
+        last_checked = existing_info.get(author.id)
+        if not last_checked:
+            new_authors += 1
+        else:
+            if last_checked.tzinfo is None:
+                last_checked = last_checked.replace(tzinfo=timezone.utc)
+            if (now - last_checked).days >= 7:
+                needs_refresh += 1
+    
+    total_to_process = new_authors + needs_refresh
+    
+    if total_to_process == 0:
+        return jsonify({
+            "status": "info", 
+            "message": _("All %(total)d authors were checked recently (within 7 days). No update needed.", 
+                        total=len(all_authors))
+        })
+    
+    # Add task to worker queue
+    task = TaskEnrichAuthors()
+    WorkerThread.add(current_user, task)
+    
+    return jsonify({
+        "status": "success", 
+        "message": _("Author enrichment started: %(new)d new + %(refresh)d to refresh (%(total)d total). Check Tasks for progress.", 
+                    new=new_authors, refresh=needs_refresh, total=len(all_authors))
+    })
+

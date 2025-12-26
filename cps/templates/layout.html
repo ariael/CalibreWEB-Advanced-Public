@@ -31,6 +31,7 @@ change_confirm_modal %}
 
 <body class="{{ page }} {{ bodyClass }}{% if g.current_theme == 1 %} blur{% endif %}" data-text="{{_('Home')}}"
   data-textback="{{_('Back')}}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <!-- Static navbar -->
   <div class="navbar navbar-default navbar-static-top" role="navigation">
     <div class="container-fluid">
@@ -79,10 +80,28 @@ change_confirm_modal %}
                 class="glyphicon glyphicon-tasks"></span> <span class="hidden-sm">{{_('Tasks')}}</span></a></li>
           {% endif %}
           {% endif %}
+
         </ul>
         {% endif %}
         <ul class="nav navbar-nav navbar-right" id="main-nav">
           {% if current_user.is_authenticated or g.allow_anonymous %}
+          <li class="dropdown">
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true"
+              aria-expanded="false">
+              <span class="glyphicon glyphicon-book"></span>
+              <span class="hidden-sm"> {{ session.get('current_library_name', _('Library')) }}</span>
+              <span class="caret"></span>
+            </a>
+            <ul class="dropdown-menu">
+              <li><a href="{{ url_for('web.switch_library', lib_id=0) }}">{{_('Default Library')}}</a></li>
+              {% if config.config_libraries %}
+              <li role="separator" class="divider"></li>
+              {% for lib in config.config_libraries %}
+              <li><a href="{{ url_for('web.switch_library', lib_id=loop.index) }}">{{lib.name}}</a></li>
+              {% endfor %}
+              {% endif %}
+            </ul>
+          </li>
           {% if g.current_theme == 1 %}
           <li class="dropdown"><a href="#" class="dropdown-toggle profileDrop" data-toggle="dropdown" role="button"
               aria-haspopup="true" aria-expanded="false"><span class="glyphicon glyphicon-user"></span></a>
@@ -137,6 +156,18 @@ change_confirm_modal %}
           {% if current_user.role_admin() %}
           <li class="top_admin"><a id="top_admin" data-text="{{_('Settings')}}" href="{{url_for('admin.admin')}}"><span
                 class="glyphicon glyphicon-dashboard"></span> <span class="hidden-sm">{{_('Admin')}}</span></a></li>
+          {% endif %}
+          {% if current_user.real_role_admin() %}
+          <li>
+            <a href="{{url_for('web.toggle_view_mode')}}">
+              {% if session.get('guest_view_mode') %}
+              <span class="glyphicon glyphicon-eye-open text-danger"></span> <span class="text-danger">{{_('Admin
+                View')}}</span>
+              {% else %}
+              <span class="glyphicon glyphicon-eye-close"></span> {{_('Guest View')}}
+              {% endif %}
+            </a>
+          </li>
           {% endif %}
           {% if g.current_theme == 0 %}
           <li><a id="top_user" data-text="{{_('Account')}}"

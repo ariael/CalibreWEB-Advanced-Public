@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 import zipfile
-from lxml import etree
-import docx
+import re
 from . import logger
+from .isbn_extractor import extract_isbn_from_file
 
 log = logger.create()
 
@@ -11,6 +11,10 @@ CZECH_CHARS = set("áéíóúůýčďěňřšťžÁÉÍÓÚŮÝČĎĚŇŘŠŤŽ"
 
 def extract_text_from_epub(file_path):
     try:
+        # Check size (skip > 100MB)
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 100 * 1024 * 1024:
+             return ""
+
         with zipfile.ZipFile(file_path, 'r') as z:
             # Look for the first xhtml/html file that is likely content
             content_files = [f for f in z.namelist() if f.endswith(('.xhtml', '.html', '.htm'))]
@@ -21,10 +25,13 @@ def extract_text_from_epub(file_path):
             text_sample = ""
             for cf in content_files[:3]:
                 with z.open(cf) as f:
-                    tree = etree.parse(f, etree.HTMLParser())
-                    # Extract text content
-                    text = "".join(tree.xpath("//text()"))
-                    text_sample += text
+                    # Read max 20KB per file to avoid network lag/memory issues
+                    raw = f.read(20000)
+                    text = raw.decode('utf-8', errors='ignore')
+                    # Strip tags using regex
+                    clean = re.sub(r'<[^>]+>', ' ', text)
+                    text_sample += clean
+                        
                     if len(text_sample) > 10000:
                         break
             return text_sample
@@ -34,26 +41,21 @@ def extract_text_from_epub(file_path):
 
 def extract_text_from_docx(file_path):
     try:
-        # Add file size check to avoid processing huge files
+        # Optimized reading: DOCX is a ZIP file. Read word/document.xml directly.
         if os.path.exists(file_path):
             file_size = os.path.getsize(file_path)
             if file_size > 50 * 1024 * 1024:  # Skip files larger than 50MB
                 log.warning("Skipping large DOCX file %s (%d MB)", file_path, file_size / (1024*1024))
                 return ""
         
-        doc = docx.Document(file_path)
-        text_sample = ""
-        para_count = 0
-        for para in doc.paragraphs:
-            if para_count >= 50:  # Limit to first 50 paragraphs
-                break
-            text_sample += para.text + " "
-            para_count += 1
-            if len(text_sample) > 10000:
-                break
-        return text_sample
-    except FileNotFoundError:
-        log.error("DOCX file not found: %s", file_path)
+        with zipfile.ZipFile(file_path, 'r') as z:
+            if 'word/document.xml' in z.namelist():
+                with z.open('word/document.xml') as f:
+                    # Read first 50KB
+                    raw = f.read(50000)
+                    text = raw.decode('utf-8', errors='ignore')
+                    clean = re.sub(r'<[^>]+>', ' ', text)
+                    return clean
         return ""
     except Exception as e:
         log.error("Failed to extract text from DOCX %s: %s", file_path, str(e))
@@ -135,13 +137,9 @@ def get_book_health(book, library_path, quick=False):
         file_path = os.path.join(library_path, book.path, d.name + "." + d.format.lower())
 
         if fmt in ['AZW', 'AZW3']:
-            # AZW/AZW3 must NOT be Czech (should be Original/English)
-            # In quick mode, we assume they are NOT Czech without scanning
-            if not quick and is_czech_content(file_path, fmt):
-                # Is Czech -> Invalid for AZW slot
-                pass 
-            else:
-                has_azw = True
+            # AZW/AZW3 is considered the Original format.
+            # We assume it is valid regardless of content language.
+            has_azw = True
         
         elif fmt == 'EPUB':
             # EPUB just needs to exist
@@ -173,12 +171,27 @@ def get_book_health(book, library_path, quick=False):
     desc_text = book.comments[0].text if book.comments else ""
     desc_lang = detect_text_language(desc_text)
     
-    is_healthy = has_azw and has_docx_cz and has_epub and not extra_formats and desc_lang in ["ces", "eng"]
+    # ISBN check
+    missing_isbn = not book.isbn
+    recovered_isbn = None
+    if missing_isbn and not quick:
+        # Try to recover from file
+        for d in book.data:
+            file_path = os.path.join(library_path, book.path, d.name + "." + d.format.lower())
+            recovered_isbn = extract_isbn_from_file(file_path)
+            if recovered_isbn:
+                log.info("Auditor recovered ISBN %s for book %d from file", recovered_isbn, book.id)
+                break
+
+    is_healthy = has_azw and has_docx_cz and has_epub and not extra_formats and desc_lang in ["ces", "eng"] and not missing_isbn
+    
     return {
         'is_healthy': is_healthy,
         'desc_lang': desc_lang,
         'extra_formats': extra_formats,
         'has_azw': has_azw,
         'has_epub': has_epub,
-        'has_docx_cz': has_docx_cz
+        'has_docx_cz': has_docx_cz,
+        'missing_isbn': missing_isbn,
+        'recovered_isbn': recovered_isbn
     }

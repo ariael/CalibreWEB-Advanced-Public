@@ -205,9 +205,6 @@
       </div>
       <a class="btn btn-default scheduledtasks" id="admin_edit_scheduled_tasks"
         href="{{url_for('admin.edit_scheduledtasks')}}">{{_('Edit Scheduled Tasks Settings')}}</a>
-      {% if config.schedule_generate_book_covers %}
-      <a class="btn btn-default" id="admin_refresh_cover_cache">{{_('Refresh Thumbnail Cache')}}</a>
-      {% endif %}
     </div>
   </div>
   {% endif %}
@@ -216,8 +213,13 @@
     <h2>{{_('Administration')}}</h2>
     <a class="btn btn-default" id="debug" href="{{url_for('admin.download_debug')}}">{{_('Download Debug Package')}}</a>
     <a class="btn btn-default" id="logfile" href="{{url_for('admin.view_logfile')}}">{{_('View Logs')}}</a>
-    <a class="btn btn-default" id="auditor" href="{{url_for('admin.library_auditor')}}">{{_('Library Format
-      Auditor')}}</a>
+    <a class="btn btn-default" id="auditor" href="{{ url_for('admin.library_auditor') }}">{{ _('Library Format Auditor')
+      }}</a>
+    <a class="btn btn-default" id="author_dash" href="{{ url_for('web.author_dashboard') }}">{{ _('Author Dashboard')
+      }}</a>
+    <a class="btn btn-default" id="admin_warm_cache" onclick="warmCache()">{{ _('Preload Covers to Cache') }}</a>
+    <a class="btn btn-default" id="admin_enrich_authors" onclick="enrichAuthors()">{{ _('Fetch Author Photos & Bios')
+      }}</a>
   </div>
   <div class="row form-group">
     <div class="btn btn-default" id="restart_database" data-toggle="modal" data-target="#StatusDialog">{{_('Reconnect
@@ -321,4 +323,46 @@
 {% endblock %}
 {% block modal %}
 {{ change_confirm_modal() }}
+{% endblock %}
+
+{% block js %}
+<script>
+  function warmCache() {
+    fetch("{{ url_for('admin.warm_cache') }}")
+      .then(function (r) { return r.json(); })
+      .then(function (d) { alert(d.message); })
+      .catch(function (e) { console.error("Cache warming failed", e); });
+  }
+
+  function enrichAuthors() {
+    var btn = document.getElementById('admin_enrich_authors');
+    btn.classList.add('disabled');
+    btn.innerHTML = '<span class="glyphicon glyphicon-refresh spinning"></span> {{_("Loading...")}}';
+
+    fetch("{{ url_for('admin.enrich_authors') }}")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        alert(d.message);
+        btn.classList.remove('disabled');
+        btn.innerHTML = "{{ _('Fetch Author Photos & Bios') }}";
+      })
+      .catch(function (e) {
+        console.error("Author enrichment failed", e);
+        alert("Error: " + e);
+        btn.classList.remove('disabled');
+        btn.innerHTML = "{{ _('Fetch Author Photos & Bios') }}";
+      });
+  }
+</script>
+<style>
+  .spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+</style>
 {% endblock %}

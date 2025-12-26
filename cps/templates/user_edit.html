@@ -54,10 +54,34 @@
       <div class="form-group">
         <label for="theme">{{_('Vzhled (Theme)')}}</label>
         <select name="theme" id="theme" class="form-control">
-          <option value="ca_black" {% if content.get_view_property('user', 'theme' )=='ca_black' or not
-            content.get_view_property('user', 'theme' ) %}selected{% endif %}>CA Black (Premium)</option>
-          <option value="blackboard" {% if content.get_view_property('user', 'theme' )=='blackboard' %}selected{% endif
-            %}>Blackboard</option>
+          <optgroup label="Dark Themes">
+            <option value="ca_black" {% if content.get_view_property('user', 'theme' )=='ca_black' or not
+              content.get_view_property('user', 'theme' ) %}selected{% endif %}>Dark - CA Black (Default)</option>
+            <option value="blackboard" {% if content.get_view_property('user', 'theme' )=='blackboard' %}selected{%
+              endif %}>Dark - Blackboard</option>
+            <option value="cali_dark_blue" {% if content.get_view_property('user', 'theme' )=='cali_dark_blue'
+              %}selected{% endif %}>Dark - Midnight Blue</option>
+            <option value="cali_dark_forest" {% if content.get_view_property('user', 'theme' )=='cali_dark_forest'
+              %}selected{% endif %}>Dark - Forest</option>
+            <option value="cali_dark_slate" {% if content.get_view_property('user', 'theme' )=='cali_dark_slate'
+              %}selected{% endif %}>Dark - Slate</option>
+            <option value="cali_dark_terminal" {% if content.get_view_property('user', 'theme' )=='cali_dark_terminal'
+              %}selected{% endif %}>Dark - Retro Terminal</option>
+            <option value="cali_nord" {% if content.get_view_property('user', 'theme' )=='cali_nord' %}selected{% endif
+              %}>Dark - Nord (Kavita)</option>
+            <option value="cali_plex" {% if content.get_view_property('user', 'theme' )=='cali_plex' %}selected{% endif
+              %}>Dark - Plex (Kavita)</option>
+          </optgroup>
+          <optgroup label="Medium Themes">
+            <option value="cali_medium_sepia" {% if content.get_view_property('user', 'theme' )=='cali_medium_sepia'
+              %}selected{% endif %}>Medium - Sepia</option>
+          </optgroup>
+          <optgroup label="Light Themes">
+            <option value="cali_light_grey" {% if content.get_view_property('user', 'theme' )=='cali_light_grey'
+              %}selected{% endif %}>Light - Standard Grey</option>
+            <option value="cali_light_solar" {% if content.get_view_property('user', 'theme' )=='cali_light_solar'
+              %}selected{% endif %}>Light - Solarized</option>
+          </optgroup>
         </select>
       </div>
 
@@ -100,7 +124,34 @@
           content.remote_auth_token.first() %} style="display: none;" {% endif %}>{{_('Force full kobo sync')}}</div>
       </div>
       {% endif %}
+
+
+      {% if not new_user %}
+      <div class="form-group">
+        <label for="webhook_url">{{_('Social Sync Webhook URL')}}</label>
+        <div class="input-group">
+          <span class="input-group-addon">
+            <input type="checkbox" name="webhook_enabled" id="webhook_enabled" aria-label="Enable Webhook" {% if
+              content.webhook_enabled %}checked{% endif %}>
+          </span>
+          <input type="text" class="form-control" name="webhook_url" id="webhook_url"
+            value="{{ content.webhook_url if content.webhook_url != None }}"
+            placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <small class="form-text text-muted">{{_('Webhook will be triggered when a book reading status changes (e.g.
+          Finished).')}}</small>
+      </div>
+
+      <div class="form-group">
+        <label for="mobile_sync_path">{{_('Cloud Sync Path (Auto-sync Reader Apps)')}}</label>
+        <input type="text" class="form-control" name="mobile_sync_path" id="mobile_sync_path"
+          value="{{ content.mobile_sync_path if content.mobile_sync_path != None }}"
+          placeholder="/mnt/gdrive/Librera/Sync">
+        <small class="form-text text-muted">{{_('Automated background sync for Librera, Moon+ Reader, and ReadEra. Set
+          path to your cloud-synced folder.')}}</small>
+      </div>
       {% endif %}
+
 
       <label>{{ _('Librera Reader Sync')}}</label>
       <div class="form-group col">

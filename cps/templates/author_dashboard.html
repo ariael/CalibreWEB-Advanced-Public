@@ -64,14 +64,16 @@
         <div class="row">
             <div class="col-xs-12 col-sm-8">
                 <h3>
-                    <a href="{{ url_for('admin.library_auditor', author_id=author.id) }}"
-                        style="text-decoration: none;">
+                    {% if current_user.role_admin() %}
+                    <a href="{{ url_for('admin.library_auditor', author_id=author.id) }}" style="text-decoration: none;"
+                        target="_blank">
                         <span class="label label-{% if author.all_healthy %}success{% else %}danger{% endif %}"
                             title="{{_('Health Status: Click to run Library Auditor')}}" data-toggle="tooltip">
                             <span
                                 class="glyphicon glyphicon-{% if author.all_healthy %}heart{% else %}warning-sign{% endif %}"></span>
                         </span>
                     </a>
+                    {% endif %}
                     <a
                         href="{{ url_for('web.books_list', data='author', sort_param='stored', book_id=author.id, page=1) }}">{{
                         author.name }}</a>
@@ -101,111 +103,180 @@
             </div>
         </div>
 
-        <div class="series-list" style="margin-left: 20px;">
-            {% for s in author.series %}
-            <div class="series-block" style="margin-top: 15px;">
-                <h4>
-                    {% if s.name != _('No Series') %}
-                    <a href="{{ url_for('admin.library_auditor', series_id=s.id) }}" style="text-decoration: none;">
-                        <span class="label label-{% if s.all_healthy %}success{% else %}danger{% endif %}"
-                            title="{{_('Health Status: Click to run Library Auditor')}}" data-toggle="tooltip">
-                            <span
-                                class="glyphicon glyphicon-{% if s.all_healthy %}heart{% else %}warning-sign{% endif %}"></span>
-                        </span>
-                    </a>
-                    <span class="glyphicon glyphicon-bookmark"></span> <a
-                        href="{{ url_for('web.books_list', data='series', sort_param='stored', book_id=s.id if s.id else -1, page=1) }}">{{
-                        s.name
-                        }}</a>
+        <div class="row">
+            <div class="col-xs-12">
+                <div class="series-list">
+                    {% for s in author.series %}
+                    <div class="series-block" style="margin-top: 15px;">
+                        <h4
+                            style="background-color: #f9f9f9; padding: 10px; border-radius: 5px; border-left: 5px solid #337ab7;">
+                            {% if s.name != _('No Series') %}
+                            {% if current_user.role_admin() %}
+                            <a href="{{ url_for('admin.library_auditor', series_id=s.id) }}"
+                                style="text-decoration: none;" target="_blank">
+                                <span class="label label-{% if s.all_healthy %}success{% else %}danger{% endif %}"
+                                    title="{{_('Health Status: Click to run Library Auditor')}}" data-toggle="tooltip">
+                                    <span
+                                        class="glyphicon glyphicon-{% if s.all_healthy %}heart{% else %}warning-sign{% endif %}"></span>
+                                </span>
+                            </a>
+                            {% endif %}
+                            <span class="glyphicon glyphicon-bookmark"></span> <a
+                                href="{{ url_for('web.books_list', data='series', sort_param='stored', book_id=s.id if s.id else -1, page=1) }}">{{
+                                s.name
+                                }}</a>
 
-                    {% if s.is_update_available %}
-                    <span class="label label-warning" title="{{_('New items added to your read series!')}}"
-                        data-toggle="tooltip">
-                        <span class="glyphicon glyphicon-bullhorn"></span>
-                    </span>
-                    {% endif %}
-
-                    {% if current_user.role_admin() %}
-                    <button class="btn btn-xs btn-link rename-series" data-id="{{ s.id }}" data-name="{{ s.name }}"
-                        style="padding: 0; color: #8a6d3b;">
-                        <span class="glyphicon glyphicon-edit"></span>
-                    </button>
-                    {% endif %}
-                    {% else %}
-                    <span class="glyphicon glyphicon-book"></span> {{ s.name }}
-                    {% endif %}
-                </h4>
-                <div class="books-horizontal"
-                    style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;">
-                    {% for book in s.books %}
-                    <div class="book-item" style="width: 120px; text-align: center; position: relative;">
-                        <a href="{{ url_for('web.show_book', book_id=book.id) }}">
-                            <img src="{{ url_for('web.get_cover', book_id=book.id) }}"
-                                class="book-cover {% if book.health and not book.health.is_healthy %}book-unhealthy{% endif %}"
-                                style="width: 110px; height: 160px; object-fit: cover; border: 1px solid #ddd;">
-
-                            {% if book.health and not book.health.is_healthy %}
-                            <span
-                                class="glyphicon glyphicon-warning-sign text-warning status-badge-container status-badge-right"
-                                title="{{_('Library health issues detected')}}" data-toggle="tooltip"></span>
+                            {% if s.is_update_available %}
+                            <span class="label label-warning" title="{{_('New items added to your read series!')}}"
+                                data-toggle="tooltip">
+                                <span class="glyphicon glyphicon-bullhorn"></span>
+                            </span>
                             {% endif %}
 
-                            {% if book.read_status == 1 %}
-                            <span
-                                class="glyphicon glyphicon-ok-sign text-success status-badge-container status-badge-left"
-                                style="background: #222;" title="{{_('Finished')}}" data-toggle="tooltip"></span>
-                            {% elif book.read_status == 2 %}
-                            <div class="progress progress-bar-overlay">
-                                <div class="progress-bar progress-bar-success" role="progressbar"
-                                    style="width: {{ book.progress_percent }}%;"
-                                    aria-valuenow="{{ book.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+                            {% if current_user.role_admin() %}
+                            <button class="btn btn-xs btn-link rename-series" data-id="{{ s.id }}"
+                                data-name="{{ s.name }}" style="padding: 0; color: #8a6d3b;">
+                                <span class="glyphicon glyphicon-edit"></span>
+                            </button>
+                            {% endif %}
+                            {% else %}
+                            <span class="glyphicon glyphicon-book"></span> {{ s.name }}
+                            {% endif %}
+                        </h4>
+                        <div class="books-horizontal"
+                            style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;">
+                            {% for book in s.books %}
+                            <div class="book-item" style="width: 120px; text-align: center; position: relative;">
+                                <a href="{{ url_for('web.show_book', book_id=book.id) }}">
+                                    <img src="{{ url_for('web.get_cover', book_id=book.id) }}"
+                                        class="book-cover {% if book.health and not book.health.is_healthy %}book-unhealthy{% endif %}"
+                                        style="width: 110px; height: 160px; object-fit: cover; border: 1px solid #ddd;">
+
+                                    {% if book.health and not book.health.is_healthy and current_user.role_admin() %}
+                                    <span
+                                        class="glyphicon glyphicon-warning-sign text-warning status-badge-container status-badge-right"
+                                        title="{{_('Library health issues detected')}}" data-toggle="tooltip"></span>
+                                    {% endif %}
+
+                                    {% if book.read_status == 1 %}
+                                    <span
+                                        class="glyphicon glyphicon-ok-sign text-success status-badge-container status-badge-left"
+                                        style="background: #222;" title="{{_('Finished')}}"
+                                        data-toggle="tooltip"></span>
+                                    {% elif book.read_status == 2 %}
+                                    <div class="progress progress-bar-overlay">
+                                        <div class="progress-bar progress-bar-success" role="progressbar"
+                                            style="width: {{ book.progress_percent }}%;"
+                                            aria-valuenow="{{ book.progress_percent }}" aria-valuemin="0"
+                                            aria-valuemax="100">
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <div style="font-size: 0.8em; margin-top: 5px; height: 3em; overflow: hidden;">
+                                        {% if book.series_index %}
+                                        <strong>{{ book.series_index|formatfloat(1) }}</strong>.
+                                        {% endif %}
+                                        {{ book.title|shortentitle(30) }}
+                                    </div>
+                                </a>
+                            </div>
+                            {% endfor %}
+
+                            {% if s.gaps %}
+                            {% for gap in s.gaps %}
+                            <div class="book-item gap-item" style="width: 120px; text-align: center; opacity: 0.5;">
+                                <div
+                                    style="width: 110px; height: 160px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #fafafa; margin: 0 auto;">
+                                    <span class="glyphicon glyphicon-question-sign"
+                                        style="font-size: 2em; color: #ccc;"></span>
+                                </div>
+                                <div style="font-size: 0.8em; margin-top: 5px; color: #999;">
+                                    <strong>{{ gap }}</strong>. {{_('Missing')}}
                                 </div>
                             </div>
+                            {% endfor %}
                             {% endif %}
-
-                            <div style="font-size: 0.8em; margin-top: 5px; height: 3em; overflow: hidden;">
-                                {% if book.series_index %}
-                                <strong>{{ book.series_index|formatfloat(1) }}</strong>.
-                                {% endif %}
-                                {{ book.title|shortentitle(30) }}
-                            </div>
-                        </a>
-                    </div>
-                    {% endfor %}
-
-                    {% if s.gaps %}
-                    {% for gap in s.gaps %}
-                    <div class="book-item gap-item" style="width: 120px; text-align: center; opacity: 0.5;">
-                        <div
-                            style="width: 110px; height: 160px; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; background: #fafafa; margin: 0 auto;">
-                            <span class="glyphicon glyphicon-question-sign" style="font-size: 2em; color: #ccc;"></span>
-                        </div>
-                        <div style="font-size: 0.8em; margin-top: 5px; color: #999;">
-                            <strong>{{ gap }}</strong>. {{_('Missing')}}
                         </div>
                     </div>
                     {% endfor %}
-                    {% endif %}
                 </div>
             </div>
-            {% endfor %}
         </div>
     </div>
     {% endfor %}
-</div>
-<script>
-    $(function () {
-        // Rename Author
-        $('.rename-author').click(function () {
-            var id = $(this).data('id');
-            var oldName = $(this).data('name');
-            var newName = prompt("{{_('Enter new name for author')}}:", oldName);
-            if (newName && newName !== oldName) {
+    <script>
+        $(function () {
+            // Rename Author
+            $('.rename-author').click(function () {
+                var id = $(this).data('id');
+                var oldName = $(this).data('name');
+                var newName = prompt("{{_('Enter new name for author')}}:", oldName);
+                if (newName && newName !== oldName) {
+                    $.ajax({
+                        url: "{{ url_for('admin.rename_author') }}",
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ id: id, new_name: newName }),
+                        success: function (response) {
+                            location.reload();
+                        },
+                        error: function (xhr) {
+                            alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
+                        }
+                    });
+                }
+            });
+
+            // Rename Series
+            $('.rename-series').click(function () {
+                var id = $(this).data('id');
+                var oldName = $(this).data('name');
+                var newName = prompt("{{_('Enter new name for series')}}:", oldName);
+                if (newName && newName !== oldName) {
+                    $.ajax({
+                        url: "{{ url_for('admin.rename_series') }}",
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ id: id, new_name: newName }),
+                        success: function (response) {
+                            location.reload();
+                        },
+                        error: function (xhr) {
+                            alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
+                        }
+                    });
+                }
+            });
+
+            // Bulk Edit Author
+            $('.bulk-edit-author').click(function () {
+                var id = $(this).data('id');
+                $.get("{{ url_for('admin.get_book_ids_for_author', author_id=0) }}".replace('/0', '/' + id), function (data) {
+                    if (data.success && data.ids.length > 0) {
+                        $('#bulk_edit_selections').val(JSON.stringify(data.ids));
+                        $('#edit_selected_modal').modal("show");
+                    }
+                });
+            });
+
+            $('#edit_selected_confirm').click(function () {
+                var selections = JSON.parse($('#bulk_edit_selections').val());
                 $.ajax({
-                    url: "{{ url_for('admin.rename_author') }}",
+                    url: "{{ url_for('edit-book.edit_selected_books') }}",
                     method: 'POST',
                     contentType: 'application/json',
-                    data: JSON.stringify({ id: id, new_name: newName }),
+                    data: JSON.stringify({
+                        "selections": selections,
+                        "authors": $("#authors_input").val(),
+                        "categories": $("#categories_input").val(),
+                        "series": $("#series_input").val(),
+                        "languages": $("#languages_input").val(),
+                        "publishers": $("#publishers_input").val(),
+                        "comments": $("#comments_input").val(),
+                        "checkA": true,
+                        "checkT": true
+                    }),
                     success: function (response) {
                         location.reload();
                     },
@@ -213,157 +284,99 @@
                         alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
                     }
                 });
-            }
-        });
-
-        // Rename Series
-        $('.rename-series').click(function () {
-            var id = $(this).data('id');
-            var oldName = $(this).data('name');
-            var newName = prompt("{{_('Enter new name for series')}}:", oldName);
-            if (newName && newName !== oldName) {
-                $.ajax({
-                    url: "{{ url_for('admin.rename_series') }}",
-                    method: 'POST',
-                    contentType: 'application/json',
-                    data: JSON.stringify({ id: id, new_name: newName }),
-                    success: function (response) {
-                        location.reload();
-                    },
-                    error: function (xhr) {
-                        alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
-                    }
-                });
-            }
-        });
-
-        // Bulk Edit Author
-        $('.bulk-edit-author').click(function () {
-            var id = $(this).data('id');
-            $.get("{{ url_for('admin.get_book_ids_for_author', author_id=0) }}".replace('/0', '/' + id), function (data) {
-                if (data.success && data.ids.length > 0) {
-                    $('#bulk_edit_selections').val(JSON.stringify(data.ids));
-                    $('#edit_selected_modal').modal("show");
-                }
             });
         });
-
-        $('#edit_selected_confirm').click(function () {
-            var selections = JSON.parse($('#bulk_edit_selections').val());
-            $.ajax({
-                url: "{{ url_for('edit-book.edit_selected_books') }}",
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    "selections": selections,
-                    "authors": $("#authors_input").val(),
-                    "categories": $("#categories_input").val(),
-                    "series": $("#series_input").val(),
-                    "languages": $("#languages_input").val(),
-                    "publishers": $("#publishers_input").val(),
-                    "comments": $("#comments_input").val(),
-                    "checkA": true,
-                    "checkT": true
-                }),
-                success: function (response) {
-                    location.reload();
-                },
-                error: function (xhr) {
-                    alert("Error: " + (xhr.responseJSON ? xhr.responseJSON.msg : "Unknown error"));
-                }
-            });
-        });
-    });
-</script>
-<!-- Bulk Edit Modal -->
-<div class="modal fade" id="edit_selected_modal" role="dialog" aria-labelledby="metaEditSelectedLabel">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-info text-center">
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-                <h4 class="modal-title">{{_('Bulk Edit Metadata')}}</h4>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="bulk_edit_selections">
-                <div class="text-left">{{_('Edit the fields you want changed for all books. Blank fields will be
-                    ignored:')}}</div>
-                <br>
-                {{_('Authors')}}:
-                <input class="form-control" id="authors_input" placeholder="e.g. Tolkien">
-                <p></p>
-                {{_('Categories (Tags)')}}:
-                <input class="form-control" id="categories_input" placeholder="e.g. Fantasy, Classic">
-                <p></p>
-                {{_('Series')}}:
-                <input class="form-control" id="series_input">
-                <p></p>
-                {{_('Languages')}}:
-                <input class="form-control" id="languages_input" placeholder="e.g. ces, eng">
-                <p></p>
-                {{_('Publishers')}}:
-                <input class="form-control" id="publishers_input">
-                <p></p>
-                {{_('Description')}}:
-                <textarea class="form-control" id="comments_input" rows="3"></textarea>
-                <p></p>
-            </div>
-            <div class="modal-footer">
-                <button id="edit_selected_confirm" type="button" class="btn btn-primary" data-dismiss="modal">{{_('Apply
-                    to all books')}}</button>
-                <button type="button" class="btn btn-default" data-dismiss="modal">{{_('Cancel')}}</button>
+    </script>
+    <!-- Bulk Edit Modal -->
+    <div class="modal fade" id="edit_selected_modal" role="dialog" aria-labelledby="metaEditSelectedLabel">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-center">
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                    <h4 class="modal-title">{{_('Bulk Edit Metadata')}}</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="bulk_edit_selections">
+                    <div class="text-left">{{_('Edit the fields you want changed for all books. Blank fields will be
+                        ignored:')}}</div>
+                    <br>
+                    {{_('Authors')}}:
+                    <input class="form-control" id="authors_input" placeholder="e.g. Tolkien">
+                    <p></p>
+                    {{_('Categories (Tags)')}}:
+                    <input class="form-control" id="categories_input" placeholder="e.g. Fantasy, Classic">
+                    <p></p>
+                    {{_('Series')}}:
+                    <input class="form-control" id="series_input">
+                    <p></p>
+                    {{_('Languages')}}:
+                    <input class="form-control" id="languages_input" placeholder="e.g. ces, eng">
+                    <p></p>
+                    {{_('Publishers')}}:
+                    <input class="form-control" id="publishers_input">
+                    <p></p>
+                    {{_('Description')}}:
+                    <textarea class="form-control" id="comments_input" rows="3"></textarea>
+                    <p></p>
+                </div>
+                <div class="modal-footer">
+                    <button id="edit_selected_confirm" type="button" class="btn btn-primary"
+                        data-dismiss="modal">{{_('Apply
+                        to all books')}}</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">{{_('Cancel')}}</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<script>
-    $(document).ready(function () {
-        var pollInterval = null;
+    <script>
+        $(document).ready(function () {
+            var pollInterval = null;
 
-        function checkRefreshProgress() {
-            $.ajax({
-                url: "{{ url_for('web.author_dashboard_refresh_status') }}",
-                method: 'GET',
-                success: function (data) {
-                    if (data.running) {
-                        $('#refresh-progress').show();
-                        $('#refresh-btn').addClass('disabled').attr('disabled', true);
-                        $('#progress-bar').css('width', data.progress + '%');
-                        $('#progress-text').text(data.progress + '%');
-                        if (data.message) {
-                            $('#progress-message').text(data.message);
+            function checkRefreshProgress() {
+                $.ajax({
+                    url: "{{ url_for('web.author_dashboard_refresh_status') }}",
+                    method: 'GET',
+                    success: function (data) {
+                        if (data.running) {
+                            $('#refresh-progress').show();
+                            $('#refresh-btn').addClass('disabled').attr('disabled', true);
+                            $('#progress-bar').css('width', data.progress + '%');
+                            $('#progress-text').text(data.progress + '%');
+                            if (data.message) {
+                                $('#progress-message').text(data.message);
+                            }
+                        } else if (data.complete) {
+                            $('#progress-bar').css('width', '100%').removeClass('active').addClass('progress-bar-success');
+                            $('#progress-text').text('100%');
+                            $('#progress-message').text('{{_("Complete! Reloading...")}}');
+                            clearInterval(pollInterval);
+                            setTimeout(function () {
+                                location.reload();
+                            }, 1500);
+                        } else if (data.failed) {
+                            $('#progress-bar').removeClass('active').addClass('progress-bar-danger');
+                            $('#progress-message').text('{{_("Failed:")}} ' + data.message);
+                            $('#refresh-btn').removeClass('disabled').removeAttr('disabled');
+                            clearInterval(pollInterval);
+                        } else {
+                            $('#refresh-progress').hide();
+                            $('#refresh-btn').removeClass('disabled').removeAttr('disabled');
                         }
-                    } else if (data.complete) {
-                        $('#progress-bar').css('width', '100%').removeClass('active').addClass('progress-bar-success');
-                        $('#progress-text').text('100%');
-                        $('#progress-message').text('{{_("Complete! Reloading...")}}');
-                        clearInterval(pollInterval);
-                        setTimeout(function () {
-                            location.reload();
-                        }, 1500);
-                    } else if (data.failed) {
-                        $('#progress-bar').removeClass('active').addClass('progress-bar-danger');
-                        $('#progress-message').text('{{_("Failed:")}} ' + data.message);
-                        $('#refresh-btn').removeClass('disabled').removeAttr('disabled');
-                        clearInterval(pollInterval);
-                    } else {
-                        $('#refresh-progress').hide();
-                        $('#refresh-btn').removeClass('disabled').removeAttr('disabled');
                     }
+                });
+            }
+
+            // Fix all library issues confirmation
+            $('#fix-all-btn').click(function (e) {
+                if (!confirm("{{_('Are you sure you want to remove all unnecessary formats from unhealthy books?')}}")) {
+                    e.preventDefault();
                 }
             });
-        }
 
-        // Fix all library issues confirmation
-        $('#fix-all-btn').click(function (e) {
-            if (!confirm("{{_('Are you sure you want to remove all unnecessary formats from unhealthy books?')}}")) {
-                e.preventDefault();
-            }
+            // Start polling on page load
+            checkRefreshProgress();
+            pollInterval = setInterval(checkRefreshProgress, 1000);
         });
-
-        // Start polling on page load
-        checkRefreshProgress();
-        pollInterval = setInterval(checkRefreshProgress, 1000);
-    });
-</script>
-{% endblock %}
+    </script>
+    {% endblock %}

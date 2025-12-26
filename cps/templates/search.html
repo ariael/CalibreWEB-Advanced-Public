@@ -30,11 +30,11 @@
     {% endif %}
     {% endif %}
     <div class="filterheader hidden-xs"><!-- ToDo: Implement filter for search results -->
-      <a id="new" data-toggle="tooltip" title="{{_('Sort according to book date, newest first')}}"
+      <a id="new" data-toggle="tooltip" title="{{_('Sort according to added date, newest first')}}"
         class="btn btn-primary{% if order == " new" %} active{% endif%}"
         href="{{url_for('web.books_list', data=page, sort_param='new', query=query)}}"><span
           class="glyphicon glyphicon-sort-by-order"></span></a>
-      <a id="old" data-toggle="tooltip" title="{{_('Sort according to book date, oldest first')}}"
+      <a id="old" data-toggle="tooltip" title="{{_('Sort according to added date, oldest first')}}"
         class="btn btn-primary{% if order == " old" %} active{% endif%}"
         href="{{url_for('web.books_list', data=page, sort_param='old', query=query)}}"><span
           class="glyphicon glyphicon-sort-by-order-alt"></span></a>

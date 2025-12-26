@@ -109,6 +109,8 @@
         <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
             data-col="col-date" checked> {{_('Date')}}</label>
         <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
+            data-col="col-added"> {{_('Added')}}</label>
+        <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
             data-col="col-rating" checked> {{_('Rating')}}</label>
         <label style="margin-right: 10px; font-weight: normal;"><input type="checkbox" class="toggle-col"
             data-col="col-tags"> {{_('Tags')}}</label>
@@ -125,6 +127,7 @@
           <th class="col-publisher hidden">{{_('Publisher')}}</th>
           <th class="col-language">{{_('Language')}}</th>
           <th class="col-date">{{_('Date')}}</th>
+          <th class="col-added hidden">{{_('Added')}}</th>
           <th class="col-rating">{{_('Rating')}}</th>
           <th class="col-tags hidden">{{_('Tags')}}</th>
           <th>{{_('Actions')}}</th>
@@ -178,6 +181,7 @@
             {% endfor %}
           </td>
           <td class="col-date">{{book.pubdate|shortdate if book.pubdate else ''}}</td>
+          <td class="col-added hidden">{{book.timestamp|shortdate if book.timestamp else ''}}</td>
           <td class="col-rating">
             {% if book.ratings %}
             <span class="glyphicon glyphicon-star"></span> {{ (book.ratings[0].rating / 2)|int }}

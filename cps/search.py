@@ -194,6 +194,8 @@ def extend_search_term(searchterm,
                        rating_high,
                        rating_low,
                        read_status,
+                       added_start=None,
+                       added_end=None,
                        ):
     searchterm.extend((author_name.replace('|', ','), book_title, publisher))
     if pub_start:
@@ -210,6 +212,20 @@ def extend_search_term(searchterm,
                                            format='medium')])
         except ValueError:
             pub_end = ""
+    if added_start:
+        try:
+            searchterm.extend([_("Added after ") +
+                               format_date(datetime.strptime(added_start, "%Y-%m-%d"),
+                                           format='medium')])
+        except ValueError:
+            added_start = ""
+    if added_end:
+        try:
+            searchterm.extend([_("Added before ") +
+                               format_date(datetime.strptime(added_end, "%Y-%m-%d"),
+                                           format='medium')])
+        except ValueError:
+            added_end = ""
     elements = {'tag': db.Tags, 'serie':db.Series, 'shelf':ub.Shelf}
     for key, db_element in elements.items():
         tag_names = calibre_db.session.query(db_element).filter(db_element.id.in_(tags['include_' + key])).all()
@@ -236,7 +252,7 @@ def extend_search_term(searchterm,
     searchterm.extend(ext for ext in tags['exclude_extension'])
     # handle custom columns
     searchterm = " + ".join(filter(None, searchterm))
-    return searchterm, pub_start, pub_end
+    return searchterm, pub_start, pub_end, added_start, added_end
 
 
 def render_adv_search_results(term, offset=None, order=None, limit=None):
@@ -265,6 +281,8 @@ def render_adv_search_results(term, offset=None, order=None, limit=None):
     pub_end = term.get("publishend")
     rating_low = term.get("ratinghigh")
     rating_high = term.get("ratinglow")
+    added_start = term.get("addedstart")
+    added_end = term.get("addedend")
     description = term.get("comments")
     read_status = term.get("read_status")
     if author_name:
@@ -310,17 +328,19 @@ def render_adv_search_results(term, offset=None, order=None, limit=None):
             cc_present = True
 
     if any(tags.values()) or author_name or book_title or publisher or pub_start or pub_end or rating_low \
-       or rating_high or description or cc_present or read_status != "Any":
-        search_term, pub_start, pub_end = extend_search_term(search_term,
-                                                             author_name,
-                                                             book_title,
-                                                             publisher,
-                                                             pub_start,
-                                                             pub_end,
-                                                             tags,
-                                                             rating_high,
-                                                             rating_low,
-                                                             read_status)
+       or rating_high or description or cc_present or read_status != "Any" or added_start or added_end:
+        search_term, pub_start, pub_end, added_start, added_end = extend_search_term(search_term,
+                                                              author_name,
+                                                              book_title,
+                                                              publisher,
+                                                              pub_start,
+                                                              pub_end,
+                                                              tags,
+                                                              rating_high,
+                                                              rating_low,
+                                                              read_status,
+                                                              added_start,
+                                                              added_end)
         if author_name:
             q = q.filter(db.Books.authors.any(func.lower(db.Authors.name).ilike("%" + author_name + "%")))
         if book_title:
@@ -329,6 +349,10 @@ def render_adv_search_results(term, offset=None, order=None, limit=None):
             q = q.filter(func.datetime(db.Books.pubdate) > func.datetime(pub_start))
         if pub_end:
             q = q.filter(func.datetime(db.Books.pubdate) < func.datetime(pub_end))
+        if added_start:
+            q = q.filter(func.datetime(db.Books.timestamp) > func.datetime(added_start))
+        if added_end:
+            q = q.filter(func.datetime(db.Books.timestamp) < func.datetime(added_end))
         if read_status != "Any":
             q = q.filter(adv_search_read_status(read_status))
         if publisher:

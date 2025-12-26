@@ -15,6 +15,24 @@
     <name>{{instance}}</name>
     <uri>https://github.com/janeczku/calibre-web</uri>
   </author>
+  {% if current_user.check_visibility(g.constants.SIDEBAR_AUTHOR) %}
+  <entry>
+    <title>{{_('Authors')}}</title>
+    <link href="{{url_for('opds.feed_authorindex')}}" type="application/atom+xml;profile=opds-catalog"/>
+    <id>{{url_for('opds.feed_authorindex')}}</id>
+    <updated>{{ current_time }}</updated>
+    <content type="text">{{_('Books ordered by Author')}}</content>
+  </entry>
+  {% endif %}
+  {% if current_user.check_visibility(g.constants.SIDEBAR_SERIES) %}
+  <entry>
+    <title>{{_('Series')}}</title>
+    <link href="{{url_for('opds.feed_seriesindex')}}" type="application/atom+xml;profile=opds-catalog"/>
+    <id>{{url_for('opds.feed_seriesindex')}}</id>
+    <updated>{{ current_time }}</updated>
+    <content type="text">{{_('Books ordered by series')}}</content>
+  </entry>
+  {% endif %}
   <entry>
     <title>{{_('Alphabetical Books')}}</title>
     <link href="{{url_for('opds.feed_booksindex')}}" type="application/atom+xml;profile=opds-catalog"/>
@@ -74,15 +92,7 @@
     <content type="text">{{_('Unread Books')}}</content>
   </entry>
   {% endif %}
-  {% if current_user.check_visibility(g.constants.SIDEBAR_AUTHOR) %}
-  <entry>
-    <title>{{_('Authors')}}</title>
-    <link href="{{url_for('opds.feed_authorindex')}}" type="application/atom+xml;profile=opds-catalog"/>
-    <id>{{url_for('opds.feed_authorindex')}}</id>
-    <updated>{{ current_time }}</updated>
-    <content type="text">{{_('Books ordered by Author')}}</content>
-  </entry>
-  {% endif %}
+
   {% if current_user.check_visibility(g.constants.SIDEBAR_PUBLISHER) %}
    <entry>
     <title>{{_('Publishers')}}</title>
@@ -101,15 +111,7 @@
     <content type="text">{{_('Books ordered by category')}}</content>
   </entry>
   {% endif %}
-  {% if current_user.check_visibility(g.constants.SIDEBAR_SERIES) %}
-  <entry>
-    <title>{{_('Series')}}</title>
-    <link href="{{url_for('opds.feed_seriesindex')}}" type="application/atom+xml;profile=opds-catalog"/>
-    <id>{{url_for('opds.feed_seriesindex')}}</id>
-    <updated>{{ current_time }}</updated>
-    <content type="text">{{_('Books ordered by series')}}</content>
-  </entry>
-  {% endif %}
+
   {% if current_user.check_visibility(g.constants.SIDEBAR_LANGUAGE) %}
   <entry>
     <title>{{_('Languages')}}</title>

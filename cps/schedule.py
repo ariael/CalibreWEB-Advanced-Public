@@ -25,7 +25,9 @@ from .tasks.clean import TaskClean
 from .tasks.thumbnail import TaskGenerateCoverThumbnails, TaskGenerateSeriesThumbnails, TaskClearCoverThumbnailCache
 from .services.worker import WorkerThread
 from .tasks.metadata_backup import TaskBackupMetadata
-from .tasks.author import TaskRefreshAuthorDashboard
+from cps.tasks.author import TaskRefreshAuthorDashboard, TaskEnrichAuthors
+from .tasks.watched_folder import TaskWatchedFolder
+from .tasks.mobile_sync import TaskMobileSync
 
 def get_scheduled_tasks(reconnect=True):
     tasks = list()
@@ -52,6 +54,24 @@ def get_scheduled_tasks(reconnect=True):
 
     # Refresh Author Dashboard Health Cache
     tasks.append([lambda: TaskRefreshAuthorDashboard(), 'refresh author dashboard health', False])
+
+    # Watched Folder Scan
+    if config.config_enable_watched_folder:
+        tasks.append([lambda: TaskWatchedFolder(), 'watched folder scan', False])
+
+    # Mobile App Sync
+    tasks.append([lambda: TaskMobileSync(), 'mobile app sync', False])
+
+    # Enrich Author Metadata (Background Fetch)
+    if config.config_author_enrichment:
+        tasks.append([lambda: TaskEnrichAuthors(), 'enrich author metadata', False])
+        from . import logger
+        log = logger.create()
+        log.info("Author Enrichment task ENABLED - checks Wikipedia every 7 days, updates only on content change")
+    else:
+        from . import logger
+        log = logger.create()
+        log.debug("Author Enrichment task DISABLED - enable in Admin > Feature Configuration")
 
     return tasks
 

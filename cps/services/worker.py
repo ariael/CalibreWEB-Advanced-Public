@@ -40,6 +40,36 @@ STAT_FINISH_SUCCESS = 3
 STAT_ENDED = 4
 STAT_CANCELLED = 5
 
+
+class GlobalLoadMonitor:
+    """Provides a global way to check if the server is under heavy load"""
+    _last_yield_time = time.time()
+    _throttle_factor = 0.0  # 0.0 (fast) to 1.0 (very slow)
+    
+    @classmethod
+    def set_throttle(cls, factor):
+        cls._throttle_factor = max(0.0, min(1.0, factor))
+
+    @classmethod
+    def should_yield(cls):
+        # Even if not throttled, we might want to yield if it's been a while
+        # since the last check to prevent GIL starvation
+        now = time.time()
+        if now - cls._last_yield_time > 0.5:
+            cls._last_yield_time = now
+            return True
+        return cls._throttle_factor > 0.1
+
+    @classmethod
+    def do_yield(cls, duration=0.1):
+        """Force a sleep to let other threads (web server) breathe"""
+        sleep_time = duration
+        if cls._throttle_factor > 0:
+            sleep_time += cls._throttle_factor * 0.5
+        time.sleep(sleep_time)
+        cls._last_yield_time = time.time()
+
+
 # Only retain this many tasks in dequeued list
 TASK_CLEANUP_TRIGGER = 20
 
@@ -202,6 +232,13 @@ class CalibreTask:
             log.exception(ex)
 
         self.end_time = datetime.now()
+        if self.stat == STAT_STARTED:
+            self.stat = STAT_FINISH_SUCCESS
+
+    def yield_cpu(self, force=False):
+        """Called by tasks to yield CPU time back to the main server thread"""
+        if force or GlobalLoadMonitor.should_yield():
+            GlobalLoadMonitor.do_yield()
 
     @property
     def stat(self):

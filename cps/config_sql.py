@@ -71,6 +71,7 @@ class _Settings(_Base):
 
     config_calibre_dir = Column(String)
     config_calibre_uuid = Column(String)
+    config_libraries = Column(JSON, default=[])
     config_calibre_split = Column(Boolean, default=False)
     config_calibre_split_dir = Column(String)
     config_port = Column(Integer, default=constants.DEFAULT_PORT)
@@ -119,6 +120,9 @@ class _Settings(_Base):
     config_use_goodreads = Column(Boolean, default=False)
     config_goodreads_api_key = Column(String)
     config_googlebooks_api_key = Column(String, default='')
+    config_hardcover_api_key = Column(String, default='')
+    config_enable_watched_folder = Column(Boolean, default=False)
+    config_author_enrichment = Column(Boolean, default=True)
     config_register_email = Column(Boolean, default=False)
     config_login_type = Column(Integer, default=0)
 

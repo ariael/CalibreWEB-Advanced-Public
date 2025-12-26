@@ -22,7 +22,7 @@ $("body.uiconfig").addClass("admin");
 $("body.advsearch").addClass("advanced_search");
 $("body.newuser").addClass("admin");
 $("body.mailset").addClass("admin");
-$("body > div.container-fluid > div > div.col-sm-10 > div.filterheader").attr("style","margin: 40px 0 !important; padding: 0 10px 0 40px !important;");
+$("body > div.container-fluid > div > div.col-sm-10 > div.filterheader").attr("style", "margin: 40px 0 !important; padding: 0 10px 0 40px !important;");
 
 
 // Back button
@@ -58,7 +58,7 @@ if ($("body.book").length > 0) {
     $("#decription").detach();
     $(".comments").detach();
     $(bookInfo).wrapAll('<div class="bookinfo"></div>');
-//  $( 'h3:contains("Description:")' ).after( '<div class="description"></div>' );
+    //  $( 'h3:contains("Description:")' ).after( '<div class="description"></div>' );
     $(".languages").appendTo(".bookinfo");
     $(".hr").detach();
     if ($(".identifiers ").length > 0) {
@@ -146,10 +146,10 @@ if ($("body.book").length > 0) {
     $("#shelf-actions").prependTo('[aria-label^="Download, send"]');
 
     $(".more-stuff .col-sm-12 #back").hide()
-/*        .html("&laquo; Previous")
-        .addClass("page-link")
-        .removeClass("btn btn-default")
-        .prependTo('[aria-label^="Download, send"]');*/
+    /*        .html("&laquo; Previous")
+            .addClass("page-link")
+            .removeClass("btn btn-default")
+            .prependTo('[aria-label^="Download, send"]');*/
 
     // Move dropdown lists higher in dom, replace bootstrap toggle with own toggle.
     $('ul[aria-labelledby="read-in-browser"]').insertBefore(".blur-wrapper").addClass("readinbrowser-drop");
@@ -241,7 +241,7 @@ if ($("body.book").length > 0) {
         dropdownToggle();
     });
 
-// Clone book rating for mobile view.
+    // Clone book rating for mobile view.
     $(".book-meta > .bookinfo > .rating").clone().insertBefore(".book-meta > .description").addClass("rating-mobile");
 }
 
@@ -284,13 +284,16 @@ $("#nav_createshelf").prependTo(".your-shelves");
 $(".profileDropli #top_user").parent().after($("#nav_about").addClass("dropdown"))
 
 // Remove the modals except from some areas where they are needed
+// Remove the modals except from some areas where they are needed
 bodyClass = $("body").attr("class").split(" ");
 modalWanted = ["admin", "editbook", "config", "uiconfig", "me", "edituser"];
 
 if ($.inArray(bodyClass[0], modalWanted) != -1) {
 } else {
-    $(" a:not(.dropdown-toggle) ")
-        .removeAttr("data-toggle", "data-target", "data-remote");
+    // Specifically target book links in the grid/list view and nuke the modal attributes
+    $("a[data-toggle='modal']").removeAttr("data-toggle data-target data-remote");
+    // Also try a broader selector for the book cover links just in case
+    $(".books a").removeAttr("data-toggle data-target data-remote");
 }
 
 
@@ -333,46 +336,46 @@ $("div.comments").readmore({
 ///////////////////////////////
 
 // Search Results
-if($("body.search").length > 0) {
-  $('div[aria-label="Add to shelves"]').click(function () {
-    $("#add-to-shelves").toggle();
-  });
+if ($("body.search").length > 0) {
+    $('div[aria-label="Add to shelves"]').click(function () {
+        $("#add-to-shelves").toggle();
+    });
 }
 
 // Advanced Search Results
-if($("body.advsearch").length > 0) {
-  $("#loader + .container-fluid")
-    .prepend("<div class='blur-wrapper'></div>");
-  $("#add-to-shelves").insertBefore(".blur-wrapper");
-  $('div[aria-label="Add to shelves"]').click(function () {
-    $("#add-to-shelves").toggle();
-  });
-  $('#add-to-shelf').height("40px");
-  function search_dropdownToggle() {
-      if( $("#add-to-shelf").length) {
-          topPos = $("#add-to-shelf").offset().top - 20;
-      } else {
-          topPos = 0
-      }
-      if ($('div[aria-label="Add to shelves"]').length > 0) {
+if ($("body.advsearch").length > 0) {
+    $("#loader + .container-fluid")
+        .prepend("<div class='blur-wrapper'></div>");
+    $("#add-to-shelves").insertBefore(".blur-wrapper");
+    $('div[aria-label="Add to shelves"]').click(function () {
+        $("#add-to-shelves").toggle();
+    });
+    $('#add-to-shelf').height("40px");
+    function search_dropdownToggle() {
+        if ($("#add-to-shelf").length) {
+            topPos = $("#add-to-shelf").offset().top - 20;
+        } else {
+            topPos = 0
+        }
+        if ($('div[aria-label="Add to shelves"]').length > 0) {
 
-          position = $('div[aria-label="Add to shelves"]').offset().left
+            position = $('div[aria-label="Add to shelves"]').offset().left
 
-          if (position + $("#add-to-shelves").width() > $(window).width()) {
-              positionOff = position + $("#add-to-shelves").width() - $(window).width();
-              adsPosition = position - positionOff - 5;
-              $("#add-to-shelves").attr("style", "left: " + adsPosition + "px !important; right: auto;  top: " + topPos + "px");
-          } else {
-              $("#add-to-shelves").attr("style", "left: " + position + "px !important; right: auto;  top: " + topPos + "px");
-          }
-      }
-  }
+            if (position + $("#add-to-shelves").width() > $(window).width()) {
+                positionOff = position + $("#add-to-shelves").width() - $(window).width();
+                adsPosition = position - positionOff - 5;
+                $("#add-to-shelves").attr("style", "left: " + adsPosition + "px !important; right: auto;  top: " + topPos + "px");
+            } else {
+                $("#add-to-shelves").attr("style", "left: " + position + "px !important; right: auto;  top: " + topPos + "px");
+            }
+        }
+    }
 
-  search_dropdownToggle();
+    search_dropdownToggle();
 
-  $(window).on("resize", function () {
-      search_dropdownToggle();
-  });
+    $(window).on("resize", function () {
+        search_dropdownToggle();
+    });
 
 }
 
@@ -623,8 +626,8 @@ $("#btnGroupDrop1").attr({
 
 if ($("body.epub").length === 0) {
     $(document).ready(function () {
-        $("[data-toggle='tooltip']").tooltip({container: "body", trigger: "hover"});
-        $("[data-toggle-two='tooltip']").tooltip({container: "body", trigger: "hover"});
+        $("[data-toggle='tooltip']").tooltip({ container: "body", trigger: "hover" });
+        $("[data-toggle-two='tooltip']").tooltip({ container: "body", trigger: "hover" });
         $("#btn-upload").attr("title", " ");
     });
 
@@ -708,8 +711,8 @@ mobileSupport();
 // Only call function once resize is complete
 //var id;
 $(window).on("resize", function () {
-//  clearTimeout(id);
-//  id = setTimeout(mobileSupport, 500);
+    //  clearTimeout(id);
+    //  id = setTimeout(mobileSupport, 500);
     mobileSupport();
 });
 

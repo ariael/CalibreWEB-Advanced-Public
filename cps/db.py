@@ -46,7 +46,7 @@ from .cw_login import current_user
 from .cache_manager import cache
 from flask_babel import gettext as _
 from flask_babel import get_locale
-from flask import flash, g, Flask
+from flask import flash, g, Flask, session
 
 from . import logger, ub, isoLanguages
 from .pagination import Pagination
@@ -673,7 +673,11 @@ class CalibreDB:
 
 
     def connect(self):
-        return self.setup_db(self.config_calibre_dir, self.app_db_path)
+        try:
+            lib_path = session.get('current_library_path', self.config_calibre_dir)
+            return self.setup_db(lib_path, self.app_db_path)
+        except Exception:
+            return self.setup_db(self.config_calibre_dir, self.app_db_path)
 
     @staticmethod
     def clear_cache():
@@ -684,12 +688,14 @@ class CalibreDB:
     def setup_db(cls, config_calibre_dir, app_db_path):
 
         if not config_calibre_dir:
-            cls.config.invalidate()
+            if config_calibre_dir == cls.config_calibre_dir:
+                cls.config.invalidate()
             return None
 
         dbpath = os.path.join(config_calibre_dir, "metadata.db")
         if not os.path.exists(dbpath):
-            cls.config.invalidate()
+            if config_calibre_dir == cls.config_calibre_dir:
+                cls.config.invalidate()
             return None
 
         try:

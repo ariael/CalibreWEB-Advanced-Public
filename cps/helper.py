@@ -31,7 +31,7 @@ import unidecode
 from uuid import uuid4
 from functools import lru_cache
 
-from flask import send_from_directory, make_response, abort, url_for, Response, request
+from flask import send_from_directory, make_response, abort, url_for, Response, request, send_file, after_this_request
 from flask_babel import gettext as _
 from flask_babel import lazy_gettext as N_
 from flask_babel import get_locale
@@ -304,6 +304,20 @@ def get_sorted_author(value):
     return value2
 
 
+def invoke_webhook(user, book_id, status):
+    if not status or not getattr(user, 'webhook_enabled', False) or not getattr(user, 'webhook_url', None):
+        return
+    try:
+        book = calibre_db.get_book(book_id)
+        if book:
+            requests.post(user.webhook_url, json={
+                "content": "User **{}** finished **{}**".format(
+                    user.name, book.title)
+            }, timeout=2)
+    except Exception as e:
+        log.error("Webhook error: %s", e)
+
+
 def edit_book_read_status(book_id, read_status=None):
     if not config.config_read_column:
         book = ub.session.query(ub.ReadBook).filter(and_(ub.ReadBook.user_id == int(current_user.id),
@@ -328,6 +342,7 @@ def edit_book_read_status(book_id, read_status=None):
             book.kobo_reading_state = kobo_reading_state
         ub.session.merge(book)
         ub.session_commit("Book {} readbit toggled".format(book_id))
+        invoke_webhook(current_user, book_id, book.read_status == ub.ReadBook.STATUS_FINISHED)
     else:
         try:
             calibre_db.create_functions(config)
@@ -1169,15 +1184,42 @@ def get_download_link(book_id, book_format, client):
             file_name = book.title
             if len(book.authors) > 0:
                 file_name = file_name + ' - ' + book.authors[0].name
-            if client in ["kindle", "pocketbook", "tolino", "stanza"]:
+            if client in ["kindle", "pocketbook", "tolino", "stanza", "librera", "moonreader"]:
                 file_name = get_valid_filename(file_name, replace_whitespace=False, force_unidecode=True)
             else:
                 file_name = quote(get_valid_filename(file_name, replace_whitespace=False))
             headers = Headers()
-            headers["Content-Type"] = mimetypes.types_map.get('.' + book_format, "application/octet-stream")
+            if book_format.lower() == "epub":
+                headers["Content-Type"] = "application/epub+zip"
+            else:
+                headers["Content-Type"] = mimetypes.types_map.get('.' + book_format, "application/octet-stream")
             headers["Content-Disposition"] = ('attachment; filename="{}.{}"; filename*=UTF-8\'\'{}.{}').format(
                 file_name, book_format, file_name, book_format)
             return do_download_file(book, book_format, client, data1, headers)
+        else:
+            # Format not found -> Try conversion
+            # Allow conversion from EPUB to MOBI, AZW3, PDF, TXT
+            can_convert = book_format.upper() in ['MOBI', 'AZW3', 'PDF', 'TXT']
+            if can_convert and calibre_db.get_book_format(book.id, 'EPUB'):
+                # Try to convert on the fly
+                temp_path = convert_book_to_temp(book.id, 'EPUB', book_format)
+                if temp_path and os.path.exists(temp_path):
+                     # Serve temp file
+                    file_name = book.title
+                    if len(book.authors) > 0:
+                        file_name = file_name + ' - ' + book.authors[0].name
+                    file_name = get_valid_filename(file_name, replace_whitespace=False, force_unidecode=True)
+                    
+                    @after_this_request
+                    def remove_file(response):
+                        try:
+                            os.remove(temp_path)
+                        except Exception as e:
+                            log.error("Error removing temp OPDS file: %s", e)
+                        return response
+
+                    return send_file(temp_path, as_attachment=True, download_name="{}.{}".format(file_name, book_format))
+                    
     else:
         log.error("Book id {} not found for downloading".format(book_id))
     abort(404)
@@ -1214,3 +1256,52 @@ def set_all_metadata_dirty():
                                               set_dirty=True,
                                               task_message=N_("Queue all books for metadata backup")),
                      hidden=False)
+
+# Formats to exclude from OPDS and other automated lists
+BLACKLIST_FORMATS = ["DOCX", "DOC", "ORIGINAL_EPUB", "ORIGINAL_MOBI", "ORIGINAL_AZW3", "ORIGINAL_PDF"]
+
+# Valid formats for specific clients, in priority order
+CLIENT_FORMATS = {
+    "kindle": ["AZW3", "MOBI", "PDF", "TXT"],
+    "kobo": ["KEPUB", "EPUB", "PDF", "CBZ", "CBR"],
+    "librera": ["EPUB", "MOBI", "PDF", "FB2", "AZW3", "CBZ", "CBR", "DJVU", "TXT"],
+    "moonreader": ["EPUB", "PDF", "MOBI", "AZW3", "CBZ", "CBR", "FB2", "TXT"],
+    "generic": ["EPUB", "PDF", "MOBI", "AZW3", "TXT"]
+}
+
+def convert_book_to_temp(book_id, old_format, new_format):
+    """
+    Synchronously convert a book to a temporary file.
+    Returns the path to the temporary file or None on failure.
+    """
+    if not config.config_converterpath or not os.path.exists(config.config_converterpath):
+        log.error("Converter tool not found")
+        return None
+
+    book = calibre_db.get_book(book_id)
+    data = calibre_db.get_book_format(book_id, old_format)
+    if not data:
+        return None
+
+    file_path = os.path.join(config.get_book_path(), book.path, data.name + '.' + old_format.lower())
+    if not os.path.exists(file_path):
+        return None
+
+    tmp_dir = get_temp_dir()
+    # Unique temp name
+    temp_file_name = "{}_{}.{}".format(book.id, uuid4(), new_format.lower())
+    output_path = os.path.join(tmp_dir, temp_file_name)
+
+    command = [config.config_converterpath, file_path, output_path]
+    log.info("Converting %s to %s for OPDS download", old_format, new_format)
+    
+    try:
+        process_wait(command)
+        
+        if os.path.exists(output_path):
+            return output_path
+    except Exception as e:
+        log.error("Failed to convert book: %s", e)
+    
+    return None
+

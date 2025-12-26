@@ -44,6 +44,12 @@
     <title>{{entry.Books.title}}</title>
     <id>urn:uuid:{{entry.Books.uuid}}</id>
     <updated>{{entry.Books.atom_timestamp}}</updated>
+    <dc:identifier>urn:uuid:{{entry.Books.uuid}}</dc:identifier>
+    {% for isbn in entry.Books.identifiers %}
+      {% if isbn.type == 'isbn' %}
+        <dc:identifier>urn:isbn:{{isbn.val}}</dc:identifier>
+      {% endif %}
+    {% endfor %}
     {% for author in entry.Books.authors %}
       <author>
         <name>{{author.name}}</name>
@@ -128,11 +134,9 @@
     <link type="image/jpeg" href="{{url_for('opds.feed_get_cover', book_id=entry.Books.id)}}" rel="http://opds-spec.org/image"/>
     <link type="image/jpeg" href="{{url_for('opds.feed_get_cover', book_id=entry.Books.id)}}" rel="http://opds-spec.org/image/thumbnail"/>
     {% endif %}
-    {% for format in entry.Books.data %}
-    <link rel="http://opds-spec.org/acquisition" href="{{ url_for('opds.opds_download_link', book_id=entry.Books.id, book_format=format.format|lower)}}"
-          length="{{format.uncompressed_size}}" title="{{format.format}}" mtime="{{entry.Books.atom_timestamp}}" type="{{format.format|lower|mimetype}}"/>
-    <link rel="http://opds-spec.org/acquisition/progressive" href="{{ url_for('opds.opds_download_link', book_id=entry.Books.id, book_format=format.format|lower)}}"
-          length="{{format.uncompressed_size}}" title="{{format.format}}" mtime="{{entry.Books.atom_timestamp}}" type="{{format.format|lower|mimetype}}"/>
+    <link rel="http://vaemcaer.wordpress.com/2011/04/23/opds-extension-streaming-pages#progress" href="{{url_for('opds.opds_update_progress', book_id=entry.Books.id)}}" type="application/json" />
+    {% for link in get_opds_download_link(entry.Books) %}
+    <link rel="{{link.rel}}" href="{{link.href}}" type="{{link.type}}" title="{{link.title}}" length="{{link.length}}" mtime="{{link.mtime}}"/>
     {% endfor %}
   </entry>
   {% endfor %}

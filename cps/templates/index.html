@@ -8,8 +8,7 @@
     {% for entry in random %}
     <div class="col-sm-3 col-lg-2 col-xs-6 book session" id="books_rand">
       <div class="cover">
-        <a href="{{ url_for('web.show_book', book_id=entry.Books.id) }}" {% if simple==false %}data-toggle="modal"
-          data-target="#bookDetailsModal" data-remote="false" {% endif %}>
+        <a href="{{ url_for('web.show_book', book_id=entry.Books.id) }}" target="_blank">
           <span class="img" title="{{ entry.Books.title }}">
             {{ image.book_cover(entry.Books) }}
             {% if entry[2] == True %}<span class="badge read glyphicon glyphicon-ok"></span>{% endif %}
@@ -17,8 +16,7 @@
         </a>
       </div>
       <div class="meta">
-        <a href="{{ url_for('web.show_book', book_id=entry.Books.id) }}" {% if simple==false %}data-toggle="modal"
-          data-target="#bookDetailsModal" data-remote="false" {% endif %}>
+        <a href="{{ url_for('web.show_book', book_id=entry.Books.id) }}" target="_blank">
           <p title="{{entry.Books.title}}" class="title">{{entry.Books.title|shortentitle}}</p>
         </a>
         <p class="author">
@@ -82,12 +80,12 @@
       href="{{url_for('web.books_list', data=page, book_id=id, sort_param='hotdesc')}}"><span
         class="glyphicon glyphicon-sort-by-order-alt"></span></a>
     {% else %}
-    <a data-toggle="tooltip" title="{{_('Sort according to book date, newest first')}}" id="new"
+    <a data-toggle="tooltip" title="{{_('Sort according to added date, newest first')}}" id="new"
       class="btn btn-primary{% if order == " new" %} active{% endif%}"
       href="{{url_for('web.books_list', data=page, book_id=id, sort_param='new')}}"><span
         class="glyphicon glyphicon-book"></span> <span class="glyphicon glyphicon-calendar"></span><span
         class="glyphicon glyphicon-sort-by-order"></span></a>
-    <a data-toggle="tooltip" title="{{_('Sort according to book date, oldest first')}}" id="old"
+    <a data-toggle="tooltip" title="{{_('Sort according to added date, oldest first')}}" id="old"
       class="btn btn-primary{% if order == " old" %} active{% endif%}"
       href="{{url_for('web.books_list', data=page, book_id=id, sort_param='old')}}"><span
         class="glyphicon glyphicon-book"></span> <span class="glyphicon glyphicon-calendar"></span><span
@@ -135,16 +133,15 @@
     </div>
   </div>
   {% endif %}
-  <div class="row">
+  <div class="row display-flex" style="display: flex; flex-wrap: wrap; margin-right: -15px; margin-left: -15px;">
     {% if entries[0] %}
     {% for entry in entries %}
     {% set book = entry.Books if entry.Books is defined else (entry[0] if entry is sequence and entry is not string else
     entry) %}
-    <div class="col-sm-3 col-lg-2 col-xs-6 book session" id="books" {% if book.series
+    <div class="col-sm-3 col-lg-2 col-xs-6 book session" id="books" style="float: none;" {% if book.series
       %}data-series-id="{{book.series[0].id}}" {% endif %}>
       <div class="cover">
-        <a href="{{ url_for('web.show_book', book_id=book.id) }}" {% if simple==false %}data-toggle="modal"
-          data-target="#bookDetailsModal" data-remote="false" {% endif %}>
+        <a href="{{ url_for('web.show_book', book_id=book.id) }}" target="_blank">
           <span class="img" title="{{ book.title }}">
             {{ image.book_cover(book) }}
             {% if entry[2] == True %}<span class="badge read glyphicon glyphicon-ok"></span>{% endif %}
@@ -182,8 +179,7 @@
         {% endif %}
       </div>
       <div class="meta">
-        <a href="{{ url_for('web.show_book', book_id=book.id) }}" {% if simple==false %}data-toggle="modal"
-          data-target="#bookDetailsModal" data-remote="false" {% endif %}>
+        <a href="{{ url_for('web.show_book', book_id=book.id) }}" target="_blank">
           <p title="{{ book.title }}" class="title">{{book.title|shortentitle}}</p>
         </a>
         <p class="author">
@@ -239,6 +235,39 @@
     {% endfor %}
     {% endif %}
   </div>
+
+  {% if page == "series" and missing_series_books %}
+  <div class="missing-series-books"
+    style="margin-top: 40px; border-top: 1px solid #444; padding-top: 30px; margin-bottom: 50px;">
+    <h3><span class="glyphicon glyphicon-exclamation-sign text-warning"></span> {{_('Incomplete Collection: Potential
+      Missing Installments')}}</h3>
+    <p class="text-muted" style="margin-bottom: 20px;">{{_('Based on external bibliographies, these books appear to
+      belong to this series but are not in your library:')}}</p>
+    <div class="row display-flex" style="display: flex; flex-wrap: wrap; margin-right: -15px; margin-left: -15px;">
+      {% for missing_title in missing_series_books %}
+      <div class="col-sm-3 col-lg-2 col-xs-6 book" style="opacity: 0.8; margin-bottom: 25px;">
+        <div class="cover"
+          style="filter: grayscale(100%); border: 2px dashed #555; border-radius: 4px; display: flex; align-items: center; justify-content: center; aspect-ratio: 2/3; background: #2a2a2a; transition: all 0.3s;">
+          <div style="text-align: center; color: #777; padding: 10px;">
+            <span class="glyphicon glyphicon-book" style="font-size: 40px; display: block; margin-bottom: 10px;"></span>
+            <span style="font-size: 12px; font-weight: bold; text-transform: uppercase;">{{_('Missing')}}</span>
+          </div>
+        </div>
+        <div class="meta" style="margin-top: 10px;">
+          <p class="title" title="{{missing_title}}"
+            style="font-style: italic; color: #bbb; line-height: 1.2; height: 2.4em; overflow: hidden;">
+            {{missing_title|shortentitle}}</p>
+          <a href="https://openlibrary.org/search?q={{missing_title|urlencode}}" target="_blank"
+            class="btn btn-xs btn-default"
+            style="margin-top: 8px; width: 100%; border-color: #444; background: transparent; color: #aaa;">
+            <span class="glyphicon glyphicon-info-sign"></span> {{_('Search Info')}}
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
 
@@ -263,25 +292,52 @@
           var $toggle = $('<div class="series-toggle badge" style="position:absolute; top:-10px; right:-10px; cursor:pointer; background:#2c3e50; z-index:10;" title="{{_("Toggle Series")}}">+' + (rows.length - 1) + '</div>');
 
           $first.css('position', 'relative').append($toggle);
-
-          // Visual stack effect
           $first.css('box-shadow', '5px 5px 0px #888');
 
+          // Create a container for hidden items inside the first book element or body
+          var $hiddenContainer = $('<div class="series-popup-' + sid + '" style="display:none; position:absolute; z-index:9999; background:#222; border:1px solid #444; padding:15px; width:300px; max-height:400px; overflow-y:auto; border-radius:4px; box-shadow: 0 5px 15px rgba(0,0,0,0.5);"></div>');
+          $('body').append($hiddenContainer);
+
           for (var i = 1; i < rows.length; i++) {
-            $(rows[i]).hide().addClass('series-child-' + sid);
+            // DETACH from grid and APPEND to popup container
+            // We restore the 'col' classes visually inside the popup but as block elements (width 100%) or grid
+            var $book = $(rows[i]);
+            $book.removeClass('col-sm-3 col-lg-2 col-xs-6 book session').addClass('series-child-' + sid).css({ 'float': 'none', 'width': '100%', 'height': 'auto', 'min-height': '0', 'margin-bottom': '10px', 'display': 'flex', 'flex-direction': 'row' });
+            // Adjust internal layout for list view style inside popup
+            $book.find('.cover').css({ 'width': '60px', 'height': 'auto', 'margin-right': '10px' });
+            $book.find('.cover img').css({ 'max-height': '90px', 'width': 'auto' });
+            $book.find('.meta').css({ 'text-align': 'left', 'margin-top': '0' });
+
+            $book.appendTo($hiddenContainer);
           }
 
           $toggle.click(function (e) {
             e.preventDefault();
             e.stopPropagation();
-            $('.series-child-' + sid).toggle();
-            // Move children after parent if grid flow is weird? 
-            // For now simple toggle.
-            if ($(this).text().indexOf('+') !== -1) {
-              $(this).text('-');
-            } else {
-              $(this).text('+' + (rows.length - 1));
-            }
+
+            var $popup = $('.series-popup-' + sid);
+
+            // Positioning logic
+            var offset = $first.offset();
+            $popup.css({
+              top: offset.top + 20,
+              left: offset.left + 20
+            });
+
+            // Close other popups
+            $('.series-popup').not($popup).hide();
+
+            $popup.toggle();
+
+            // Close on click outside
+            $(document).one('click', function () {
+              $popup.hide();
+            });
+          });
+
+          // Prevent closing when clicking inside popup
+          $hiddenContainer.click(function (e) {
+            e.stopPropagation();
           });
         }
       });

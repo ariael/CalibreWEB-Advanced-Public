@@ -106,8 +106,11 @@ def add_security_headers(resp):
     if request.endpoint == "web.read_book":
         csp += " blob: "
     csp += "; img-src 'self'"
-    if request.path.startswith("/author/") and config.config_use_goodreads:
-        csp += " images.gr-assets.com i.gr-assets.com s.gr-assets.com"
+    # Allow author photos from Wikipedia and Open Library
+    if request.path.startswith("/author/"):
+        csp += " upload.wikimedia.org covers.openlibrary.org"
+        if config.config_use_goodreads:
+            csp += " images.gr-assets.com i.gr-assets.com s.gr-assets.com"
     csp += " data:"
     if request.endpoint == "edit-book.show_edit_book" or config.config_use_google_drive:
         csp += " *"
@@ -185,6 +188,25 @@ def check_pending():
     pass
 
 # ################################### data provider functions #########################################################
+
+
+@web.route("/switch_library/<int:lib_id>")
+@user_login_required
+def switch_library(lib_id):
+    if lib_id == 0:
+        flask_session.pop('current_library_path', None)
+        flask_session.pop('current_library_name', None)
+    else:
+        try:
+            lib = config.config_libraries[lib_id - 1]
+            flask_session['current_library_path'] = lib['path']
+            flask_session['current_library_name'] = lib['name']
+        except (IndexError, TypeError):
+            flash(_("Library not found"), category="error")
+
+    # Clear cache
+    calibre_db.clear_cache()
+    return redirect(url_for('web.index'))
 
 
 @web.route("/ajax/emailstat")
@@ -626,25 +648,134 @@ def render_author_books(page, author_id, order):
                                                         db.books_series_link,
                                                         db.books_series_link.c.book == db.Books.id,
                                                         db.Series)
-    if entries is None or not len(entries):
-        flash(_("Oops! Selected book is unavailable. File does not exist or is not accessible"),
-              category="error")
-        return redirect(url_for("web.index"))
+    if entries is None:
+        entries = []
+    
     if sqlalchemy_version2:
         author = calibre_db.session.get(db.Authors, author_id)
     else:
         author = calibre_db.session.query(db.Authors).get(author_id)
-    author_name = author.name.replace('|', ',')
+        
+    if not author:
+        flash(_("Author not found"), category="error")
+        return redirect(url_for("web.index"))
 
-    author_info = None
+    author_name = author.name.replace('|', ',')
     other_books = []
-    if services.goodreads_support and config.config_use_goodreads:
+    
+    # DIRECT DATABASE QUERY - get cached author info if it exists
+    author_info = ub.session.query(ub.AuthorInfo).filter(ub.AuthorInfo.author_id == author_id).first()
+    
+    # Log what we found for debugging
+    if author_info:
+        log.debug("Found author_info for %s: bio=%s, image=%s", 
+                 author_name, 
+                 bool(author_info.biography), 
+                 bool(author_info.image_url))
+    else:
+        log.debug("No author_info found for %s (id=%d)", author_name, author_id)
+    
+    # Try Goodreads if no cached data and Goodreads is enabled
+    if not author_info and services.goodreads_support and config.config_use_goodreads:
         author_info = services.goodreads_support.get_author_info(author_name)
-        book_entries = [entry.Books for entry in entries]
-        other_books = services.goodreads_support.get_other_books(author_info, book_entries)
+        if author_info:
+            book_entries = [entry.Books for entry in entries]
+            other_books = services.goodreads_support.get_other_books(author_info, book_entries)
+    
+    # Final fallback - use basic author object from Calibre DB
+    if not author_info:
+        # Create a simple object with required attributes
+        class AuthorDisplay:
+            pass
+        author_info = AuthorDisplay()
+        author_info.author_name = author_name
+        author_info.name = author.name
+        author_info.biography = None
+        author_info.image_url = None
+        author_info.link = None
+
+    # Ensure author_name is set for template
+    if not hasattr(author_info, 'author_name'):
+        author_info.author_name = author_name
+
+    # Calculate missing books from bibliography
+    missing_books = services.author_enrichment.get_missing_books(author_id)
+    log.debug("Found %d missing books for author %d", len(missing_books), author_id)
+
     return render_title_template('author.html', entries=entries, pagination=pagination, id=author_id,
                                  title=_("Author: %(name)s", name=author_name), author=author_info,
-                                 other_books=other_books, page="author", order=order[1])
+                                 other_books=other_books, missing_books=missing_books,
+                                 page="author", order=order[1])
+
+
+@web.route("/author/refresh/<int:author_id>", methods=["POST"])
+@login_required_if_no_ano
+def refresh_author_info(author_id):
+    """
+    AJAX endpoint to refresh a single author's info from Open Library.
+    Forces a fresh fetch even if data was recently checked.
+    """
+    from flask import jsonify
+    
+    if sqlalchemy_version2:
+        author = calibre_db.session.get(db.Authors, author_id)
+    else:
+        author = calibre_db.session.query(db.Authors).get(author_id)
+    
+    if not author:
+        return jsonify({"success": False, "error": _("Author not found")})
+    
+    author_name = author.name.replace('|', ',')
+    
+    try:
+        # Force refresh from Open Library
+        from cps.services.author_enrichment import fetch_author_info
+        new_data = fetch_author_info(author_name)
+        
+        if new_data:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            
+            # Get or create author_info record
+            author_info = ub.session.query(ub.AuthorInfo).filter(
+                ub.AuthorInfo.author_id == author_id).first()
+            
+            if not author_info:
+                author_info = ub.AuthorInfo(
+                    author_id=author_id,
+                    author_name=author_name,
+                    biography=new_data.get("biography"),
+                    image_url=new_data.get("image_url"),
+                    content_hash=new_data.get("content_hash"),
+                    last_updated=now,
+                    last_checked=now
+                )
+                ub.session.add(author_info)
+            else:
+                author_info.biography = new_data.get("biography")
+                author_info.image_url = new_data.get("image_url")
+                author_info.content_hash = new_data.get("content_hash")
+                author_info.last_updated = now
+                author_info.last_checked = now
+            
+            ub.session.commit()
+            
+            return jsonify({
+                "success": True,
+                "message": _("Author info updated successfully"),
+                "biography": new_data.get("biography", "")[:200] + "..." if new_data.get("biography") else None,
+                "image_url": new_data.get("image_url"),
+                "work_count": new_data.get("work_count", 0)
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": _("No data found for this author on Open Library")
+            })
+            
+    except Exception as e:
+        log.error("Error refreshing author %s: %s", author_name, str(e))
+        return jsonify({"success": False, "error": str(e)})
 
 
 def render_publisher_books(page, book_id, order):
@@ -696,18 +827,61 @@ def render_series_books(page, book_id, order):
                                                                 db.Series)
         series_name = _("None")
     else:
-        series_name = calibre_db.session.query(db.Series).filter(db.Series.id == book_id).first()
-        if series_name:
+        series_obj = calibre_db.session.query(db.Series).filter(db.Series.id == book_id).first()
+        if series_obj:
             entries, random, pagination = calibre_db.fill_indexpage(page, 0,
                                                                     db.Books,
                                                                     db.Books.series.any(db.Series.id == book_id),
                                                                     [order[0][0]],
                                                                     True, config.config_read_column)
-            series_name = series_name.name
+            series_name = series_obj.name
         else:
             abort(404)
+            
+    # Find missing series books - Only for ADMINS and using CACHED data to avoid load
+    missing_series_books = []
+    if current_user.role_admin() and book_id != '-1' and series_name:
+        try:
+            from .services import author_enrichment
+            authors_ids = set()
+            for entry in entries:
+                book = entry.Books if hasattr(entry, 'Books') else (entry[0] if isinstance(entry, (list, tuple)) else entry)
+                for author in book.authors:
+                    authors_ids.add(author.id)
+            
+            # Get cached bibliographies for all authors of this series
+            author_infos = ub.session.query(ub.AuthorInfo).filter(ub.AuthorInfo.author_id.in_(list(authors_ids))).all()
+            
+            # Aggregate all potential works from cache
+            all_cached_works = []
+            for info in author_infos:
+                if info.works:
+                    all_cached_works.extend(info.works)
+            
+            if all_cached_works:
+                # Filter works by checking if they contain/match the series name
+                norm_series = author_enrichment.normalize_book_title(series_name)
+                owned_normalized = {author_enrichment.normalize_book_title(e.Books.title if hasattr(e, 'Books') else e.title) for e in entries}
+                
+                for work_title in set(all_cached_works):
+                    norm_work = author_enrichment.normalize_book_title(work_title)
+                    # If work title contains series name and we don't own it
+                    if norm_series in norm_work and norm_work not in owned_normalized:
+                        # Double check fuzzy Match
+                        is_owned = False
+                        for ot in owned_normalized:
+                            if ot and (ot in norm_work or norm_work in ot):
+                                is_owned = True
+                                break
+                        if not is_owned:
+                            missing_series_books.append(work_title)
+
+        except Exception as e:
+            logger.create().error("Failed to lookup cached missing series books for %s: %s", series_name, e)
+
     return render_title_template('index.html', random=random, pagination=pagination, entries=entries, id=book_id,
-                                 title=_("Series: %(serie)s", serie=series_name), page="series", order=order[1])
+                                 title=_("Series: %(serie)s", serie=series_name), page="series", order=order[1],
+                                 missing_series_books=sorted(list(set(missing_series_books))))
 
 
 def render_ratings_books(page, book_id, order):
@@ -1756,6 +1930,22 @@ def get_series_cover(series_id, resolution=None):
     return get_series_cover_thumbnail(series_id, cover_resolution)
 
 
+@web.route("/toggle_view_mode")
+@user_login_required
+def toggle_view_mode():
+    if not current_user.real_role_admin():
+         abort(403)
+    
+    if flask_session.get('guest_view_mode'):
+        flask_session.pop('guest_view_mode', None)
+        flash(_('Switched to Admin View'), category="info")
+    else:
+        flask_session['guest_view_mode'] = True
+        flash(_('Switched to Guest View'), category="info")
+        
+    return redirect(request.referrer or url_for('web.index'))
+
+
 
 @web.route("/robots.txt")
 def get_robots():
@@ -2145,7 +2335,10 @@ def change_profile(kobo_support, local_oauth_check, oauth_status, translations, 
         current_user.random_books = 1 if to_save.get("show_random") == "on" else 0
         current_user.default_language = to_save.get("default_language", "all")
         current_user.locale = to_save.get("locale", "en")
+        current_user.webhook_url = to_save.get("webhook_url", "")
+        current_user.webhook_enabled = True if to_save.get("webhook_enabled") == "on" else False
         current_user.set_view_property('user', 'theme', to_save.get('theme', 'ca_black'))
+        current_user.mobile_sync_path = to_save.get("mobile_sync_path", "")
         old_state = current_user.kobo_only_shelves_sync
         # 1 -> 0: nothing has to be done
         # 0 -> 1: all synced books have to be added to archived books, + currently synced shelfs which

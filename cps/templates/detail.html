@@ -259,6 +259,9 @@
                 <p>{{ _('Published') }}: {{ entry.pubdate|formatdate }} </p>
             </div>
             {% endif %}
+            <div class="added-date">
+                <p>{{ _('Added') }}: {{ entry.timestamp|formatdate }} </p>
+            </div>
             {% if cc|length > 0 %}
 
 

@@ -46,12 +46,18 @@ Toto není jen seznam funkcí. Toto jsou problémy, které jsme měli, a řešen
     * **Waiting Room (Čekárna)**: Když se někdo přihlásí poprvé, nevidí nic. Systém ho zachytí a umístí do "Čekací listiny" (Role 0). Administrátor dostane notifikaci: *"Uživatel XY (známý z fóra) chce přístup."* Teprve po ručním schválení se brány knihovny otevřou. To nám umožňuje udržovat 100% důvěryhodnou komunitu.
     * **Limited Admin**: Vytvořili jsme novou roli, která může opravovat názvy knih a obálky, ale nemůže smazat server nebo změnit nastavení. Díky tomu nám s údržbou pomáhají dobrovolníci bez rizika.
 
-### 4. Svoboda čtení: Pryč s kabely
-* **Problém**: *"Musím najít kabel, připojit čtečku k PC, otevřít Calibre, poslat..."* V roce 2025 je to otravné.
+### 4. Svoboda čtení: Cloud Sync & OPDS
+* **Problém**: *"Musím najít kabel, připojit čtečku k PC, otevřít Calibre, poslat..."* V roce 2025 je to otravné. A co hůř, když dočtete na tabletu, web o tom neví.
 * **Naše Řešení**:
-    * **PocketBook & Moon+ Reader**: Plná implementace **OPDS serveru**. Ve čtečce zadáte URL jen jednou. Pak už jen procházíte "obchod" s knihami zdarma přímo na displeji čtečky a stahujete přes Wi-Fi.
-    * **Kobo Sync**: Pro majitele Kobo čteček jsme integrovali `kepubify` a protokol pro synchronizaci. Nejenže se knihy stahují vzduchem, ale **synchronizuje se stav přečtení**. Dočtete kapitolu v tramvaji na čtečce, a doma na webu vidíte, že máte splněno.
-    * **Kindle**: Funkční "Send-to-Kindle" tlačítko, které pošle e-mail s knihou přímo Amazonu, pokud preferujete tento ekosystém.
+    * **Automated Cloud Sync (NOVINKA)**: Čtete na tabletu v Libreře/Moon+ Readeru? Systém automaticky sleduje vaši zálohu v cloudu a synchronizuje progres čtení zpět do webu. Bez kabelů, bez klikání.
+    * **Chytré OPDS**: Server pozná vaše zařízení. Máte Kindle? Dostanete automaticky AZW3. Máte Kobo? Dostanete KEPUB. Máte offline soubory? Systém je spáruje podle "otisku" a začne synchronizovat.
+    * **Kobo Sync**: Hluboká integrace s protokolem Kobo.
+
+### 5. Živá Knihovna: "Author Intelligence"
+* **Problém**: Jméno autora "Karel Čapek" je jen text. Nic vám to neřekne.
+* **Naše Řešení**:
+    * **Bio Enrichment**: Na pozadí běží inteligentní skener, který z online databází stahuje životopisy, fotky a data narození/úmrtí.
+    * **Author Dashboard**: Nový pohled na vaši sbírku přes osobnosti, ne jen přes obálky knih.
 
 ### 5. Vizuální Revoluce: "CA Black" & Hierarchie
 * **Problém**: Původní vzhled byl... funkční, ale zastaralý. Bílé pozadí vypalovalo oči v noci a seznamy knih byly nepřehledné "nudle".
@@ -109,12 +115,18 @@ This is not just a feature list. These are the problems we faced and the solutio
     * **Waiting Room**: Login doesn't mean access. New users land in a "Pending" state (Role 0). The Admin gets an alert: *"User XY (from the forum) requests entry."* Only after manual approval does the library open up. This keeps the ecosystem 100% trusted.
     * **Limited Admin**: A new role that lets volunteers fix tyops and covers without giving them the keys to delete the server or change configs.
 
-### 4. Freedom form Cables
-* **Problem**: *"Find cable, connect reader, open Calibre, send..."* In 2025, this is archaic.
+### 4. Freedom form Cables: Cloud Sync & OPDS
+* **Problem**: *"Find cable, connect reader, open Calibre, send..."* In 2025, this is archaic. And worse, when you finish reading on your tablet, the web doesn't know.
 * **Our Solution**:
-    * **PocketBook & Moon+ Reader**: Full **OPDS Server** implementation. Enter the URL once, and browse a "Bookstore-like" interface on your e-ink screen. Download via Wi-Fi instantly.
-    * **Kobo Sync**: Deep integration with `kepubify`. Not only do books sync wirelessly, but **reading status syncs too**. Finish a chapter on the train, and the web dashboard marks it as read.
-    * **Kindle**: A functional "Send-to-Kindle" button if you prefer the Amazon ecosystem.
+    * **Automated Cloud Sync (NEW)**: Reading on Librera/Moon+ Reader? The system watches your cloud backup and syncs reading progress back to the web automatically. Zero clicks.
+    * **Smart OPDS**: The server knows your device. Kindle? Gets AZW3 automatically. Kobo? Gets KEPUB. Offline files? The system pairs them via digital fingerprint and syncs progress.
+    * **Kobo Sync**: Deep integration with Kobo protocol.
+
+### 5. Living Library: "Author Intelligence"
+* **Problem**: Author name "Isaac Asimov" is just text. It tells you nothing.
+* **Our Solution**:
+    * **Bio Enrichment**: An intelligent background scanner fetches biographies, photos, and birth/death dates.
+    * **Author Dashboard**: A new way to browse your collection via personalities, not just book covers.
 
 ### 5. Visual Revolution: "CA Black" & Hierarchy
 * **Problem**: The original look was functional but dated. The white background hurt eyes at night, and lists were cluttered.

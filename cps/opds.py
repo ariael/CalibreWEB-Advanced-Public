@@ -23,7 +23,7 @@
 import datetime
 from urllib.parse import unquote_plus
 
-from flask import Blueprint, request, render_template, make_response, abort, g, jsonify
+from flask import Blueprint, request, render_template, make_response, abort, g, jsonify, url_for
 from flask_babel import get_locale
 from flask_babel import gettext as _
 
@@ -31,7 +31,8 @@ from flask_babel import gettext as _
 from sqlalchemy.sql.expression import func, text, or_, and_, true
 from sqlalchemy.exc import InvalidRequestError, OperationalError
 
-from . import logger, config, db, calibre_db, ub, isoLanguages, constants
+from . import logger, config, db, calibre_db, ub, isoLanguages, constants, helper
+import mimetypes
 from .usermanagement import requires_basic_auth_if_no_ano, auth
 from .helper import get_download_link, get_book_cover
 from .pagination import Pagination
@@ -435,9 +436,11 @@ def feed_shelf(book_id):
     return render_xml_template('feed.xml', entries=result, pagination=pagination, cc=cc)
 
 
-@opds.route("/opds/download/<book_id>/<book_format>/")
+@opds.route("/opds/download/<book_id>/<book_format>", defaults={'anyname': None})
+@opds.route("/opds/download/<book_id>/<book_format>/", defaults={'anyname': None})
+@opds.route("/opds/download/<book_id>/<book_format>/<anyname>")
 @requires_basic_auth_if_no_ano
-def opds_download_link(book_id, book_format):
+def opds_download_link(book_id, book_format, anyname):
     if not auth.current_user().role_download():
         return abort(401)
     
@@ -599,9 +602,78 @@ def feed_search(term):
 
 
 def render_xml_template(*args, **kwargs):
-    # ToDo: return time in current timezone similar to %z
+    def get_opds_download_link(book):
+        from flask import url_for
+        try:
+            ua = request.headers.get('User-Agent', '').lower()
+            client = 'generic'
+            if 'kindle' in ua or 'amazon' in ua: client = 'kindle'
+            elif 'kobo' in ua: client = 'kobo'
+            elif 'librera' in ua: client = 'librera'
+            elif 'moonreader' in ua or 'moon+' in ua: client = 'moonreader'
+            
+            supported = helper.CLIENT_FORMATS.get(client, helper.CLIENT_FORMATS['generic'])
+            links = []
+            
+            # Filter existing formats against blacklist
+            existing_formats = {f.format.upper(): f for f in book.data if f.format.upper() not in helper.BLACKLIST_FORMATS}
+            
+            # 1. Direct matches from 'supported' list in priority order
+            found_direct = False
+            for fmt in supported:
+                if fmt in existing_formats:
+                    f = existing_formats[fmt]
+                    links.append({
+                        'rel': 'http://opds-spec.org/acquisition',
+                        'href': url_for('opds.opds_download_link', book_id=book.id, book_format=f.format.lower()),
+                        'type': mimetypes.types_map.get('.'+f.format.lower(), 'application/octet-stream'),
+                        'title': fmt,
+                        'length': f.uncompressed_size,
+                        'mtime': book.atom_timestamp
+                    })
+                    found_direct = True
+                    break 
+            # 2. Conversion options: If no direct match but we have EPUB
+            if not found_direct:
+                epub_f = next((f for f in book.data if f.format.upper() == 'EPUB'), None)
+                if epub_f:
+                    target_fmt = None
+                    if client == 'kindle':
+                        target_fmt = 'AZW3'
+                    elif client == 'kobo':
+                        target_fmt = 'KEPUB'
+                    
+                    if target_fmt:
+                        links.append({
+                            'rel': 'http://opds-spec.org/acquisition',
+                            'href': url_for('opds.opds_download_link', book_id=book.id, book_format=target_fmt.lower()),
+                            'type': mimetypes.types_map.get('.'+target_fmt.lower(), 'application/octet-stream'),
+                            'title': target_fmt + ' (Convert)',
+                            'length': epub_f.uncompressed_size,
+                            'mtime': book.atom_timestamp
+                        })
+
+            # 3. Last resort: show any non-blacklisted format
+            if not links:
+                for fmt, f in existing_formats.items():
+                    links.append({
+                        'rel': 'http://opds-spec.org/acquisition',
+                        'href': url_for('opds.opds_download_link', book_id=book.id, book_format=f.format.lower()),
+                        'type': mimetypes.types_map.get('.'+f.format.lower(), 'application/octet-stream'),
+                        'title': fmt,
+                        'length': f.uncompressed_size,
+                        'mtime': book.atom_timestamp
+                    })
+            
+            return links
+        except Exception as e:
+            log.error("Error generating OPDS links for book %s: %s", book.id, e)
+            return []
+
     currtime = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S+00:00")
-    xml = render_template(current_time=currtime, instance=config.config_calibre_web_title, constants=constants.sidebar_settings, *args, **kwargs)
+    xml = render_template(current_time=currtime, instance=config.config_calibre_web_title, 
+                          constants=constants.sidebar_settings, get_opds_download_link=get_opds_download_link,
+                          *args, **kwargs)
     response = make_response(xml)
     response.headers["Content-Type"] = "application/atom+xml; charset=utf-8"
     return response

@@ -146,6 +146,11 @@ class UserBase:
         return constants.has_flag(self.role, role_flag)
 
     def role_admin(self):
+        if flask_session.get('guest_view_mode'):
+            return False
+        return self._has_role(constants.ROLE_ADMIN)
+
+    def real_role_admin(self):
         return self._has_role(constants.ROLE_ADMIN)
 
     def role_download(self):
@@ -260,6 +265,8 @@ class User(UserBase, Base):
     remote_auth_token = relationship('RemoteAuthToken', backref='user', lazy='dynamic')
     view_settings = Column(JSON, default={})
     kobo_only_shelves_sync = Column(Integer, default=0)
+    webhook_enabled = Column(Boolean, default=False)
+    mobile_sync_path = Column(String, default="") # Path to auto-sync folder (e.g. GDrive mount)
 
 
 if oauth_support:
@@ -593,6 +600,23 @@ class RemoteAuthToken(Base):
         return '<Token %r>' % self.id
 
 
+class AuthorInfo(Base):
+    __tablename__ = 'author_info'
+    id = Column(Integer, primary_key=True)
+    author_id = Column(Integer, unique=True)
+    author_name = Column(String)
+    suggested_name = Column(String)  # Proposed name from enrichment (First Last)
+    biography = Column(String)
+    image_url = Column(String)
+    content_hash = Column(String)  # MD5 hash of bio+image to detect actual changes
+    works = Column(JSON)  # List of works from Open Library
+    last_updated = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    last_checked = Column(DateTime, default=lambda: datetime.now(timezone.utc))  # When we last queried external API
+
+    def __repr__(self):
+        return '<AuthorInfo %r>' % self.author_name
+
+
 class BookHealth(Base):
     __tablename__ = 'book_health'
 
@@ -640,6 +664,8 @@ def add_missing_tables(engine, _session):
         Thumbnail.__table__.create(bind=engine)
     if not engine.dialect.has_table(engine.connect(), "user_preference"):
         UserPreference.__table__.create(bind=engine)
+    if not engine.dialect.has_table(engine.connect(), "author_info"):
+        AuthorInfo.__table__.create(bind=engine)
 
 
 # migrate all settings missing in registration table
@@ -678,6 +704,20 @@ def migrate_Database(_session):
     migrate_registration_table(engine, _session)
     migrate_user_session_table(engine, _session)
     migrate_read_book_table(engine, _session)
+    migrate_webhook_columns(_session)
+    migrate_author_info_columns(_session)
+    migrate_author_info_works_column(_session)
+    migrate_author_info_suggested_name_column(_session)
+    migrate_user_mobile_sync_column(_session)
+
+
+def migrate_user_mobile_sync_column(session):
+    """Add mobile_sync_path column to user table"""
+    try:
+        session.execute(text("ALTER TABLE user ADD COLUMN mobile_sync_path VARCHAR"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
 
 
 def migrate_read_book_table(engine, _session):
@@ -689,6 +729,50 @@ def migrate_read_book_table(engine, _session):
             trans = conn.begin()
             conn.execute(text("ALTER TABLE book_read_link ADD column 'progress_percent' FLOAT DEFAULT 0.0"))
             trans.commit()
+
+
+def migrate_webhook_columns(session):
+    try:
+        session.execute(text("ALTER TABLE user ADD COLUMN webhook_url VARCHAR"))
+        session.execute(text("ALTER TABLE user ADD COLUMN webhook_enabled BOOLEAN DEFAULT 0"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
+
+
+def migrate_author_info_columns(session):
+    """Add content_hash and last_checked columns to author_info for smart caching"""
+    # Add content_hash column
+    try:
+        session.execute(text("ALTER TABLE author_info ADD COLUMN content_hash VARCHAR"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
+    
+    # Add last_checked column
+    try:
+        session.execute(text("ALTER TABLE author_info ADD COLUMN last_checked DATETIME"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
+
+
+def migrate_author_info_works_column(session):
+    """Add works column to author_info"""
+    try:
+        session.execute(text("ALTER TABLE author_info ADD COLUMN works JSON"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
+
+
+def migrate_author_info_suggested_name_column(session):
+    """Add suggested_name column to author_info"""
+    try:
+        session.execute(text("ALTER TABLE author_info ADD COLUMN suggested_name VARCHAR"))
+        session.commit()
+    except exc.OperationalError:
+        session.rollback()
 
 
 def clean_database(_session):

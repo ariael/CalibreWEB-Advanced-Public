@@ -18,53 +18,112 @@
 var direction = $("#asc").data('order');  // 0=Descending order; 1= ascending order
 var sort = 0;       // Show sorted entries
 
+// Detect if we're using hierarchy table (for authors) or classic list
+var isHierarchyView = $(".hierarchy-table").length > 0;
+
+// Get items to sort/filter based on view type
+function getListItems() {
+    if (isHierarchyView) {
+        return $(".hierarchy-table tbody tr.author-row");
+    } else {
+        return $("#list").children(".row");
+    }
+}
+
+// Get item name for sorting/filtering
+function getItemName(element) {
+    if (isHierarchyView) {
+        return $(element).find("a").first().text().trim();
+    } else {
+        var store = element.attributes["data-id"];
+        return store ? store.value : "";
+    }
+}
+
+// Show/hide item
+function showItem(element, show) {
+    if (isHierarchyView) {
+        var $row = $(element);
+        var authorId = $row.data('id');
+        var $detailsRow = $('#author-details-' + authorId);
+        if (show) {
+            $row.show();
+        } else {
+            $row.hide();
+            $detailsRow.hide(); // Also hide details for hidden authors
+        }
+    } else {
+        if (show) {
+            $(element).show();
+        } else {
+            $(element).hide();
+        }
+    }
+}
+
+// Sort name toggle (B,A <-> A B)
 $("#sort_name").click(function() {
     $("#sort_name").toggleClass("active");
     var className = $("h1").attr("Class") + "_sort_name";
     var obj = {};
     obj[className] = sort;
 
-    var count = 0;
-    var index = 0;
-    var store;
-    // Append 2nd half of list to first half for easier processing
-    var cnt = $("#second").contents();
-    $("#list").append(cnt);
-    // Count no of elements
-    var listItems = $("#list").children(".row");
-    var listlength = listItems.length;
-    // check for each element if its Starting character matches
-    $(".row").each(function() {
-        if ( sort === 1) {
-            store = this.attributes["data-name"];
-        } else {
-            store = this.attributes["data-id"];
-        }
-        $(this).find("a").html(store.value);
-        if ($(this).css("display") !== "none") {
-            count++;
-        }
-    });
-
-    // Find count of middle element
-    if (count > 20) {
-        var middle = parseInt(count / 2, 10) + (count % 2);
-        // search for the middle of all visibe elements
-        $(".row").each(function() {
-            index++;
-            if ($(this).css("display") !== "none") {
-                middle--;
-                if (middle <= 0) {
-                    return false;
-                }
+    if (isHierarchyView) {
+        // For hierarchy view, swap between "Last, First" and "First Last" display
+        $(".hierarchy-table tbody tr.author-row").each(function() {
+            var $link = $(this).find("a").first();
+            var name = $link.text().trim();
+            var parts = name.split(", ");
+            if (parts.length === 2 && sort === 0) {
+                // "Last, First" -> "First Last"
+                $link.text(parts[1] + " " + parts[0]);
+            } else if (parts.length === 1 && name.includes(" ") && sort === 1) {
+                // "First Last" -> "Last, First"
+                var words = name.split(" ");
+                var lastName = words.pop();
+                $link.text(lastName + ", " + words.join(" "));
             }
         });
-        // Move second half of visible elements
-        $("#second").append(listItems.slice(index, listlength));
+    } else {
+        // Original list view logic
+        var count = 0;
+        var index = 0;
+        var store;
+        var cnt = $("#second").contents();
+        $("#list").append(cnt);
+        var listItems = $("#list").children(".row");
+        var listlength = listItems.length;
+        
+        $(".row").each(function() {
+            if (sort === 1) {
+                store = this.attributes["data-name"];
+            } else {
+                store = this.attributes["data-id"];
+            }
+            $(this).find("a").html(store.value);
+            if ($(this).css("display") !== "none") {
+                count++;
+            }
+        });
+
+        if (count > 20) {
+            var middle = parseInt(count / 2, 10) + (count % 2);
+            $(".row").each(function() {
+                index++;
+                if ($(this).css("display") !== "none") {
+                    middle--;
+                    if (middle <= 0) {
+                        return false;
+                    }
+                }
+            });
+            $("#second").append(listItems.slice(index, listlength));
+        }
     }
     sort = (sort + 1) % 2;
 });
 
+// Descending order
 $("#desc").click(function() {
     if (direction === 0) {
         return;
@@ -80,41 +139,59 @@ $("#desc").click(function() {
         url: getPath() + "/ajax/view",
         data: "{\"" + page + "\": {\"dir\": \"desc\"}}",
     });
-    var index = 0;
-    var list = $("#list");
-    var second = $("#second");
-    // var cnt = ;
-    list.append(second.contents());
-    var listItems = list.children(".row");
-    var reversed, elementLength, middle;
-    reversed = listItems.get().reverse();
-    elementLength = reversed.length;
-    // Find count of middle element
-    var count = $(".row:visible").length;
-    if (count > 20) {
-        middle = parseInt(count / 2, 10) + (count % 2);
 
-        //var middle = parseInt(count / 2) + (count % 2);
-        // search for the middle of all visible elements
-        $(reversed).each(function() {
-            index++;
-            if ($(this).css("display") !== "none") {
-                middle--;
-                if (middle <= 0) {
-                    return false;
-                }
+    if (isHierarchyView) {
+        // Sort hierarchy table rows
+        var $tbody = $(".hierarchy-table tbody");
+        var rows = $tbody.find("tr.author-row").get();
+        
+        rows.sort(function(a, b) {
+            var nameA = $(a).find("a").first().text().trim().toUpperCase();
+            var nameB = $(b).find("a").first().text().trim().toUpperCase();
+            return nameB.localeCompare(nameA); // Descending
+        });
+        
+        // Reattach rows with their detail rows
+        $.each(rows, function(idx, row) {
+            var authorId = $(row).data('id');
+            var $detailRow = $('#author-details-' + authorId);
+            $tbody.append(row);
+            if ($detailRow.length) {
+                $tbody.append($detailRow);
             }
         });
-
-        list.append(reversed.slice(0, index));
-        second.append(reversed.slice(index, elementLength));
     } else {
-        list.append(reversed.slice(0, elementLength));
+        // Original list view logic
+        var index = 0;
+        var list = $("#list");
+        var second = $("#second");
+        list.append(second.contents());
+        var listItems = list.children(".row");
+        var reversed, elementLength, middle;
+        reversed = listItems.get().reverse();
+        elementLength = reversed.length;
+        var count = $(".row:visible").length;
+        if (count > 20) {
+            middle = parseInt(count / 2, 10) + (count % 2);
+            $(reversed).each(function() {
+                index++;
+                if ($(this).css("display") !== "none") {
+                    middle--;
+                    if (middle <= 0) {
+                        return false;
+                    }
+                }
+            });
+            list.append(reversed.slice(0, index));
+            second.append(reversed.slice(index, elementLength));
+        } else {
+            list.append(reversed.slice(0, elementLength));
+        }
     }
     direction = 0;
 });
 
-
+// Ascending order
 $("#asc").click(function() {
     if (direction === 1) {
         return;
@@ -130,95 +207,135 @@ $("#asc").click(function() {
         url: getPath() + "/ajax/view",
         data: "{\"" + page + "\": {\"dir\": \"asc\"}}",
     });
-    var index = 0;
-    var list = $("#list");
-    var second = $("#second");
-    list.append(second.contents());
-    var listItems = list.children(".row");
-    var reversed = listItems.get().reverse();
-    var elementLength = reversed.length;
 
-    // Find count of middle element
-    var count = $(".row:visible").length;
-    if (count > 20) {
-        var middle = parseInt(count / 2, 10) + (count % 2);
-
-        //var middle = parseInt(count / 2) + (count % 2);
-        // search for the middle of all visible elements
-        $(reversed).each(function() {
-            index++;
-            if ($(this).css("display") !== "none") {
-                middle--;
-                if (middle <= 0) {
-                    return false;
-                }
+    if (isHierarchyView) {
+        // Sort hierarchy table rows
+        var $tbody = $(".hierarchy-table tbody");
+        var rows = $tbody.find("tr.author-row").get();
+        
+        rows.sort(function(a, b) {
+            var nameA = $(a).find("a").first().text().trim().toUpperCase();
+            var nameB = $(b).find("a").first().text().trim().toUpperCase();
+            return nameA.localeCompare(nameB); // Ascending
+        });
+        
+        // Reattach rows with their detail rows
+        $.each(rows, function(idx, row) {
+            var authorId = $(row).data('id');
+            var $detailRow = $('#author-details-' + authorId);
+            $tbody.append(row);
+            if ($detailRow.length) {
+                $tbody.append($detailRow);
             }
         });
-
-        // middle = parseInt(elementLength / 2) + (elementLength % 2);
-        list.append(reversed.slice(0, index));
-        second.append(reversed.slice(index, elementLength));
     } else {
-        list.append(reversed.slice(0, elementLength));
+        // Original list view logic
+        var index = 0;
+        var list = $("#list");
+        var second = $("#second");
+        list.append(second.contents());
+        var listItems = list.children(".row");
+        var reversed = listItems.get().reverse();
+        var elementLength = reversed.length;
+        var count = $(".row:visible").length;
+        if (count > 20) {
+            var middle = parseInt(count / 2, 10) + (count % 2);
+            $(reversed).each(function() {
+                index++;
+                if ($(this).css("display") !== "none") {
+                    middle--;
+                    if (middle <= 0) {
+                        return false;
+                    }
+                }
+            });
+            list.append(reversed.slice(0, index));
+            second.append(reversed.slice(index, elementLength));
+        } else {
+            list.append(reversed.slice(0, elementLength));
+        }
     }
     direction = 1;
 });
 
+// Show all
 $("#all").click(function() {
     $("#all").addClass("active");
     $(".char").removeClass("active");
-    var cnt = $("#second").contents();
-    $("#list").append(cnt);
-    // Find count of middle element
-    var listItems = $("#list").children(".row");
-    var listlength = listItems.length;
-    var middle = parseInt(listlength / 2, 10) + (listlength % 2);
-    // go through all elements and make them visible
-    listItems.each(function() {
-        $(this).show();
-    });
-    // Move second half of all elements
-    if (listlength > 20) {
-        $("#second").append(listItems.slice(middle, listlength));
+    
+    if (isHierarchyView) {
+        // Show all authors in hierarchy view
+        $(".hierarchy-table tbody tr.author-row").each(function() {
+            $(this).show();
+        });
+    } else {
+        // Original list view logic
+        var cnt = $("#second").contents();
+        $("#list").append(cnt);
+        var listItems = $("#list").children(".row");
+        var listlength = listItems.length;
+        var middle = parseInt(listlength / 2, 10) + (listlength % 2);
+        listItems.each(function() {
+            $(this).show();
+        });
+        if (listlength > 20) {
+            $("#second").append(listItems.slice(middle, listlength));
+        }
     }
 });
 
+// Character filter
 $(".char").click(function() {
     $(".char").removeClass("active");
     $(this).addClass("active");
     $("#all").removeClass("active");
-    var character = this.innerText;
-    var count = 0;
-    var index = 0;
-    // Append 2nd half of list to first half for easier processing
-    var cnt = $("#second").contents();
-    $("#list").append(cnt);
-    // Count no of elements
-    var listItems = $("#list").children(".row");
-    var listlength = listItems.length;
-    // check for each element if its Starting character matches
-    $(".row").each(function() {
-        if (this.attributes["data-id"].value.charAt(0).toUpperCase() !== character) {
-            $(this).hide();
-        } else {
-            $(this).show();
-            count++;
-        }
-    });
-    if (count > 20) {
-        // Find count of middle element
-        var middle = parseInt(count / 2, 10) + (count % 2);
-        // search for the middle of all visibe elements
-        $(".row").each(function() {
-            index++;
-            if ($(this).css("display") !== "none") {
-                middle--;
-                if (middle <= 0) {
-                    return false;
-                }
+    var character = this.innerText.toUpperCase();
+    
+    if (isHierarchyView) {
+        // Filter hierarchy table by character
+        $(".hierarchy-table tbody tr.author-row").each(function() {
+            var name = $(this).find("a").first().text().trim();
+            var firstChar = name.charAt(0).toUpperCase();
+            var authorId = $(this).data('id');
+            var $detailsRow = $('#author-details-' + authorId);
+            
+            if (firstChar === character) {
+                $(this).show();
+            } else {
+                $(this).hide();
+                $detailsRow.hide(); // Also hide expanded details
             }
         });
-        // Move second half of visible elements
-        $("#second").append(listItems.slice(index, listlength));
+    } else {
+        // Original list view logic
+        var count = 0;
+        var index = 0;
+        var cnt = $("#second").contents();
+        $("#list").append(cnt);
+        var listItems = $("#list").children(".row");
+        var listlength = listItems.length;
+        
+        $(".row").each(function() {
+            if (this.attributes["data-id"].value.charAt(0).toUpperCase() !== character) {
+                $(this).hide();
+            } else {
+                $(this).show();
+                count++;
+            }
+        });
+        if (count > 20) {
+            var middle = parseInt(count / 2, 10) + (count % 2);
+            $(".row").each(function() {
+                index++;
+                if ($(this).css("display") !== "none") {
+                    middle--;
+                    if (middle <= 0) {
+                        return false;
+                    }
+                }
+            });
+            $("#second").append(listItems.slice(index, listlength));
+        }
     }
 });
+
