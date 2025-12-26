@@ -4,10 +4,10 @@
 $dbms = 'mysqli';
 $dbhost = 'localhost';
 $dbport = '';
-$dbname = 'ebookforum_sk';
-$dbuser = 'ebookforum_sk';
-$dbpasswd = 'TadiBidli4Pirati!';
-$table_prefix = 'ebf_phpbb_';
+$dbname = 'YOUR_DB_NAME';
+$dbuser = 'YOUR_DB_USER';
+$dbpasswd = 'YOUR_DB_PASSWORD';
+$table_prefix = 'phpbb_';
 $acm_type = 'file';
 $load_extensions = '';
 
